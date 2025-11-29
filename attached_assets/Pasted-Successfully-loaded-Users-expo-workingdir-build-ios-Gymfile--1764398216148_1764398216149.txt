@@ -1,0 +1,77 @@
+Successfully loaded '/Users/expo/workingdir/build/ios/Gymfile' 📄
++---------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                                                                  Detected Values from './Gymfile'                                                                   |
++-----------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+| suppress_xcode_output | true                                                                                                                                        |
+| clean                 | false                                                                                                                                       |
+| scheme                | HiitCoach                                                                                                                                   |
+| configuration         | Release                                                                                                                                     |
+| export_options        |                                                                                                                                             |
+| export_xcargs         | OTHER_CODE_SIGN_FLAGS="--keychain /var/folders/5_/4knlryn57n39p2c_jw8567z00000gn/T/eas-build-95f59a62-5323-48f2-b5f3-44a8e647c682.keychain" |
+| disable_xcpretty      | true                                                                                                                                        |
+| buildlog_path         | /Users/expo/workingdir/logs                                                                                                                 |
+| output_directory      | ./build                                                                                                                                     |
++-----------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+Resolving Swift Package Manager dependencies...
+$ xcodebuild -resolvePackageDependencies -workspace ./HiitCoach.xcworkspace -scheme HiitCoach -configuration Release
+▸ Command line invocation:
+▸     /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -resolvePackageDependencies -workspace ./HiitCoach.xcworkspace -scheme HiitCoach -configuration Release
+▸ resolved source packages:
+$ xcodebuild -showBuildSettings -workspace ./HiitCoach.xcworkspace -scheme HiitCoach -configuration Release 2>&1
+Detected provisioning profile mapping: {:"com.hittcoach.hittcoach"=>"e7a03e85-d3ef-4292-a000-dbbf0eba9367"}
++-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                                                                                          Summary for gym 2.228.0                                                                                          |
++-------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+| workspace                                                   | ./HiitCoach.xcworkspace                                                                                                                     |
+| scheme                                                      | HiitCoach                                                                                                                                   |
+| clean                                                       | false                                                                                                                                       |
+| output_directory                                            | ./build                                                                                                                                     |
+| output_name                                                 | Hiit Coach                                                                                                                                  |
+| configuration                                               | Release                                                                                                                                     |
+| silent                                                      | false                                                                                                                                       |
+| skip_package_ipa                                            | false                                                                                                                                       |
+| skip_package_pkg                                            | false                                                                                                                                       |
+| export_options.method                                       | app-store                                                                                                                                   |
+| export_options.provisioningProfiles.com.hittcoach.hittcoach | e7a03e85-d3ef-4292-a000-dbbf0eba9367                                                                                                        |
+| export_xcargs                                               | OTHER_CODE_SIGN_FLAGS="--keychain /var/folders/5_/4knlryn57n39p2c_jw8567z00000gn/T/eas-build-95f59a62-5323-48f2-b5f3-44a8e647c682.keychain" |
+| build_path                                                  | /Users/expo/Library/Developer/Xcode/Archives/2025-11-28                                                                                     |
+| result_bundle                                               | false                                                                                                                                       |
+| buildlog_path                                               | /Users/expo/workingdir/logs                                                                                                                 |
+| destination                                                 | generic/platform=iOS                                                                                                                        |
+| suppress_xcode_output                                       | true                                                                                                                                        |
+| xcodebuild_formatter                                        | xcpretty                                                                                                                                    |
+| build_timing_summary                                        | false                                                                                                                                       |
+| disable_xcpretty                                            | true                                                                                                                                        |
+| skip_profile_detection                                      | false                                                                                                                                       |
+| xcodebuild_command                                          | xcodebuild                                                                                                                                  |
+| skip_package_dependencies_resolution                        | false                                                                                                                                       |
+| disable_package_automatic_updates                           | false                                                                                                                                       |
+| use_system_scm                                              | false                                                                                                                                       |
+| xcode_path                                                  | /Applications/Xcode.app                                                                                                                     |
++-------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+$ set -o pipefail && xcodebuild -workspace ./HiitCoach.xcworkspace -scheme HiitCoach -configuration Release -destination 'generic/platform=iOS' -archivePath /Users/expo/Library/Developer/Xcode/Archives/2025-11-28/Hiit\ Coach\ 2025-11-28\ 22.35.26.xcarchive archive | tee /Users/expo/workingdir/logs/Hiit\ Coach-HiitCoach.log > /dev/null
+› Executing react-native Pods/hermes-engine » [CP-User] [Hermes] Replace Hermes for the right configuration, if needed
+› Executing react-native Pods/ReactNativeDependencies » [CP-User] [RNDeps] Replace React Native Dependencies for the right configuration, if needed
+▸ ** ARCHIVE FAILED **
+▸ The following build commands failed:
+▸ 	PhaseScriptExecution [CP]\ Copy\ XCFrameworks /Users/expo/Library/Developer/Xcode/DerivedData/HiitCoach-ctkzndertqerqwbknlbfwswcbpac/Build/Intermediates.noindex/ArchiveIntermediates/HiitCoach/IntermediateBuildFilesPath/Pods.build/Release-iphoneos/ReactNativeDependencies.build/Script-46EB2E00022020.sh (in target 'ReactNativeDependencies' from project 'Pods')
+▸ 	Archiving workspace HiitCoach with scheme HiitCoach
+▸ (2 failures)
+Exit status: 65
++---------------------------------------+
+|           Build environment           |
++-------------+-------------------------+
+| xcode_path  | /Applications/Xcode.app |
+| gym_version | 2.228.0                 |
+| sdk         | iPhoneOS26.0.sdk        |
++-------------+-------------------------+
+Looks like fastlane ran into a build/archive error with your project
+It's hard to tell what's causing the error, so we wrote some guides on how
+to troubleshoot build and signing issues: https://docs.fastlane.tools/codesigning/getting-started/
+Before submitting an issue on GitHub, please follow the guide above and make
+sure your project is set up correctly.
+fastlane uses `xcodebuild` commands to generate your binary, you can see the
+the full commands printed out in yellow in the above log.
+Make sure to inspect the output above, as usually you'll find more error information there
+[!] Error building the application - see the log above
+fastlane gym exited with non-zero code: 1
