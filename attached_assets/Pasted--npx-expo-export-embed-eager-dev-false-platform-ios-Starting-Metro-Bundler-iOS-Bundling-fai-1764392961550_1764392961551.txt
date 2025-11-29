@@ -1,0 +1,37 @@
+> npx expo export:embed --eager --dev=false --platform=ios
+Starting Metro Bundler
+iOS Bundling failed 170ms node_modules/expo/AppEntry.js (1 module)
+Unable to resolve module ../../App from /Users/expo/workingdir/build/node_modules/expo/AppEntry.js: 
+None of these files exist:
+  * App(.ios.ts|.native.ts|.ts|.ios.tsx|.native.tsx|.tsx|.ios.mjs|.native.mjs|.mjs|.ios.js|.native.js|.js|.ios.jsx|.native.jsx|.jsx|.ios.json|.native.json|.json|.ios.cjs|.native.cjs|.cjs|.ios.scss|.native.scss|.scss|.ios.sass|.native.sass|.sass|.ios.css|.native.css|.css)
+  * App
+  1 | import registerRootComponent from 'expo/src/launch/registerRootComponent';
+  2 |
+> 3 | import App from '../../App';
+    |                  ^
+  4 |
+  5 | registerRootComponent(App);
+  6 |
+Import stack:
+ node_modules/expo/AppEntry.js
+ | import "../../App"
+ 
+ | import "/Users/expo/workingdir/build/node_modules/expo/AppEntry.js"
+Error: Unable to resolve module ../../App from /Users/expo/workingdir/build/node_modules/expo/AppEntry.js: 
+None of these files exist:
+  * App(.ios.ts|.native.ts|.ts|.ios.tsx|.native.tsx|.tsx|.ios.mjs|.native.mjs|.mjs|.ios.js|.native.js|.js|.ios.jsx|.native.jsx|.jsx|.ios.json|.native.json|.json|.ios.cjs|.native.cjs|.cjs|.ios.scss|.native.scss|.scss|.ios.sass|.native.sass|.sass|.ios.css|.native.css|.css)
+  * App
+  1 | import registerRootComponent from 'expo/src/launch/registerRootComponent';
+  2 |
+> 3 | import App from '../../App';
+    |                  ^
+  4 |
+  5 | registerRootComponent(App);
+  6 |
+Import stack:
+ node_modules/expo/AppEntry.js
+ | import "../../App"
+ 
+ | import "/Users/expo/workingdir/build/node_modules/expo/AppEntry.js"
+Error: npx expo export:embed --eager --dev=false --platform=ios exited with non-zero code: 1
+/bin/bash --login -eo pipefail /var/folders/5_/4knlryn57n39p2c_jw8567z00000gn/T/eas-build/604702ce-2999-4ac4-b202-e40250d50aed/steps/59df7106-d6e8-4a43-8802-6a967225d431/scripts/fcb0047d-6449-4c33-beea-85f75311a249.sh exited with non-zero code: 1
