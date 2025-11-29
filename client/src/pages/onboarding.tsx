@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, Check, Dumbbell, Clock, Activity, ChevronLeft } from "lucide-react";
+import { ArrowRight, Check, Dumbbell, Clock, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -49,25 +49,21 @@ export default function Onboarding() {
       title: "Fitness Level",
       subtitle: "Help us tailor the intensity",
       component: (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {["Beginner", "Intermediate", "Advanced", "Elite"].map((level) => (
-            <div 
+            <Card 
               key={level}
               className={cn(
-                "p-5 rounded-[1.5rem] cursor-pointer transition-all duration-200 flex items-center justify-between border",
+                "p-4 border-2 cursor-pointer transition-all duration-200 flex items-center justify-between",
                 preferences.fitnessLevel === level 
-                  ? "bg-white border-white text-slate-900 shadow-lg" 
-                  : "bg-[#121726] border-white/5 text-white hover:bg-[#1a2133]"
+                  ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(204,255,0,0.15)]" 
+                  : "border-border/50 bg-card/50 hover:border-primary/50"
               )}
               onClick={() => handleSelect("fitnessLevel", level)}
             >
-              <span className="text-lg font-bold">{level}</span>
-              {preferences.fitnessLevel === level && (
-                <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                  <Check className="text-slate-900 w-4 h-4" strokeWidth={3} />
-                </div>
-              )}
-            </div>
+              <span className="text-lg font-bold tracking-wide">{level}</span>
+              {preferences.fitnessLevel === level && <Check className="text-primary" size={20} />}
+            </Card>
           ))}
         </div>
       )
@@ -76,24 +72,24 @@ export default function Onboarding() {
       title: "Equipment",
       subtitle: "What do you have access to?",
       component: (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           {["Dumbbells", "Kettlebell", "Pull-up Bar", "Jump Rope", "Box", "None (Bodyweight)"].map((item) => (
-            <div 
+            <Card 
               key={item}
               className={cn(
-                "p-4 rounded-[1.5rem] cursor-pointer transition-all duration-200 flex flex-col items-center justify-center gap-3 aspect-square border",
+                "p-4 border-2 cursor-pointer transition-all duration-200 flex flex-col items-center justify-center gap-2 aspect-square",
                 preferences.equipment.includes(item) 
-                  ? "bg-white border-white text-slate-900 shadow-lg" 
-                  : "bg-[#121726] border-white/5 text-white hover:bg-[#1a2133]"
+                  ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(204,255,0,0.15)]" 
+                  : "border-border/50 bg-card/50 hover:border-primary/50"
               )}
               onClick={() => toggleEquipment(item)}
             >
               <Dumbbell className={cn(
                 "w-8 h-8",
-                preferences.equipment.includes(item) ? "text-primary fill-current" : "text-muted-foreground"
+                preferences.equipment.includes(item) ? "text-primary" : "text-muted-foreground"
               )} />
               <span className="text-sm font-bold text-center leading-tight">{item}</span>
-            </div>
+            </Card>
           ))}
         </div>
       )
@@ -102,10 +98,10 @@ export default function Onboarding() {
       title: "Duration",
       subtitle: "How much time do you have?",
       component: (
-        <div className="space-y-8 py-8">
-          <div className="flex justify-between text-muted-foreground font-bold text-sm uppercase tracking-wider">
-            <span>5 min</span>
-            <span>30 min</span>
+        <div className="space-y-6 py-8">
+          <div className="flex justify-between text-muted-foreground font-display text-xl">
+            <span>5 MIN</span>
+            <span>30 MIN</span>
           </div>
           <input 
             type="range" 
@@ -114,15 +110,13 @@ export default function Onboarding() {
             step="1"
             value={preferences.duration}
             onChange={(e) => handleSelect("duration", parseInt(e.target.value))}
-            className="w-full h-2 bg-[#121726] rounded-lg appearance-none cursor-pointer accent-primary"
+            className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
           />
           <div className="text-center">
-            <div className="inline-flex items-baseline justify-center">
-              <span className="text-8xl font-bold text-white tracking-tighter">
-                {preferences.duration}
-              </span>
-              <span className="text-xl font-bold text-primary ml-2">MIN</span>
-            </div>
+            <span className="text-6xl font-display font-bold text-primary neon-text">
+              {preferences.duration}
+            </span>
+            <span className="text-xl font-display text-muted-foreground ml-2">MINUTES</span>
           </div>
         </div>
       )
@@ -131,33 +125,27 @@ export default function Onboarding() {
       title: "Primary Goal",
       subtitle: "What are you training for?",
       component: (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {[
             { id: "cardio", label: "Cardio & Endurance", icon: Activity },
             { id: "strength", label: "Strength & Power", icon: Dumbbell },
             { id: "metcon", label: "Metabolic Conditioning", icon: Clock }
           ].map((goal) => (
-            <div 
+            <Card 
               key={goal.id}
               className={cn(
-                "p-5 rounded-[1.5rem] cursor-pointer transition-all duration-200 flex items-center gap-4 border",
+                "p-5 border-2 cursor-pointer transition-all duration-200 flex items-center gap-4",
                 preferences.goal === goal.id 
-                  ? "bg-white border-white text-slate-900 shadow-lg" 
-                  : "bg-[#121726] border-white/5 text-white hover:bg-[#1a2133]"
+                  ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(204,255,0,0.15)]" 
+                  : "border-border/50 bg-card/50 hover:border-primary/50"
               )}
               onClick={() => handleSelect("goal", goal.id)}
             >
-              <div className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center",
-                preferences.goal === goal.id ? "bg-slate-100" : "bg-white/5"
-              )}>
-                <goal.icon className={cn(
-                  "w-5 h-5",
-                  preferences.goal === goal.id ? "text-primary" : "text-muted-foreground"
-                )} />
-              </div>
-              <span className="text-lg font-bold">{goal.label}</span>
-            </div>
+              <goal.icon className={cn(
+                preferences.goal === goal.id ? "text-primary" : "text-muted-foreground"
+              )} />
+              <span className="text-lg font-bold tracking-wide">{goal.label}</span>
+            </Card>
           ))}
         </div>
       )
@@ -170,23 +158,18 @@ export default function Onboarding() {
     <MobileLayout hideNav>
       <div className="p-6 h-full flex flex-col">
         <div className="flex items-center justify-between mb-8">
-          {step > 0 ? (
-             <Button variant="ghost" size="icon" onClick={() => setStep(step - 1)} className="text-white hover:bg-white/10 -ml-2">
-               <ChevronLeft />
-             </Button>
-          ) : <div />}
-          
-          <div className="flex gap-2">
+          <div className="flex gap-1">
             {steps.map((_, i) => (
               <div 
                 key={i} 
                 className={cn(
-                  "h-1.5 w-8 rounded-full transition-all duration-300",
-                  i <= step ? "bg-primary" : "bg-[#121726]"
+                  "h-1 w-8 rounded-full transition-all duration-300",
+                  i <= step ? "bg-primary" : "bg-secondary"
                 )} 
               />
             ))}
           </div>
+          <span className="font-display text-muted-foreground">STEP {step + 1}/{steps.length}</span>
         </div>
 
         <AnimatePresence mode="wait">
@@ -198,11 +181,11 @@ export default function Onboarding() {
             className="flex-1 flex flex-col"
           >
             <div className="mb-8">
-              <h1 className="text-3xl font-bold mb-2 text-white">{currentStep.title}</h1>
-              <p className="text-muted-foreground text-base">{currentStep.subtitle}</p>
+              <h1 className="text-4xl font-bold mb-2 text-white">{currentStep.title}</h1>
+              <p className="text-muted-foreground text-lg">{currentStep.subtitle}</p>
             </div>
 
-            <div className="flex-1 overflow-y-auto scrollbar-hide pb-4">
+            <div className="flex-1">
               {currentStep.component}
             </div>
           </motion.div>
@@ -210,14 +193,14 @@ export default function Onboarding() {
 
         <Button 
           size="lg" 
-          className="w-full h-16 rounded-[1.5rem] text-lg font-bold bg-primary text-black hover:bg-primary/90 mt-4 shadow-[0_0_20px_rgba(204,255,0,0.3)]"
+          className="w-full h-14 text-lg font-bold uppercase tracking-wider bg-primary text-black hover:bg-primary/90 mt-4"
           onClick={nextStep}
           disabled={
             (step === 0 && !preferences.fitnessLevel) ||
             (step === 3 && !preferences.goal)
           }
         >
-          {step === steps.length - 1 ? "Start Training" : "Continue"}
+          {step === steps.length - 1 ? "Start Training" : "Next"}
           <ArrowRight className="ml-2 w-5 h-5" />
         </Button>
       </div>

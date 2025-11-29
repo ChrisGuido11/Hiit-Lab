@@ -33,64 +33,74 @@
 }
 
 :root {
-  /* Dark Future Theme based on screenshot */
-  --background: 220 40% 6%; /* #090E16 Deep Navy */
-  --foreground: 0 0% 98%;
+  /* Dark Mode Default - High Voltage Theme */
+  --background: 0 0% 4%; /* #0a0a0a */
+  --foreground: 0 0% 98%; /* #fafafa */
   
-  --card: 220 35% 11%; /* #121726 Lighter Navy */
+  --card: 0 0% 8%; /* #141414 */
   --card-foreground: 0 0% 98%;
   
-  --popover: 220 35% 11%;
+  --popover: 0 0% 8%;
   --popover-foreground: 0 0% 98%;
   
-  --primary: 85 100% 59%; /* #ccff00 Neon Lime */
-  --primary-foreground: 220 40% 6%;
+  --primary: 75 100% 50%; /* #ccff00 Neon Lime */
+  --primary-foreground: 0 0% 0%;
   
-  --secondary: 220 30% 18%;
+  --secondary: 0 0% 15%;
   --secondary-foreground: 0 0% 98%;
   
-  --muted: 220 20% 20%;
-  --muted-foreground: 220 10% 65%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 65%;
   
-  --accent: 85 100% 59%;
-  --accent-foreground: 220 40% 6%;
+  --accent: 75 100% 50%;
+  --accent-foreground: 0 0% 0%;
   
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 98%;
 
-  --border: 220 30% 18%;
-  --input: 220 30% 18%;
-  --ring: 85 100% 59%;
+  --border: 0 0% 20%;
+  --input: 0 0% 20%;
+  --ring: 75 100% 50%;
 
-  --radius: 1.5rem; /* 24px */
+  --radius: 1rem;
 }
 
+/* Force dark mode styles always since it's a fitness app */
 body {
   @apply bg-background text-foreground font-sans antialiased selection:bg-primary selection:text-primary-foreground;
   overflow-x: hidden;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  /* Screenshot uses clean sans-serif headers, not display font */
-  @apply font-sans tracking-tight font-bold;
+  @apply font-display uppercase tracking-wide;
 }
 
 .glass-panel {
-  background: rgba(18, 23, 38, 0.7);
+  background: rgba(20, 20, 20, 0.7);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.card-white {
-  @apply bg-white text-slate-900;
+.neon-text {
+  text-shadow: 0 0 10px rgba(204, 255, 0, 0.5);
 }
 
-/* Hide scrollbar but allow scroll */
-.scrollbar-hide::-webkit-scrollbar {
-    display: none;
+.neon-border {
+  box-shadow: 0 0 15px rgba(204, 255, 0, 0.2);
 }
-.scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+
+/* Custom scrollbar for webkit */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted));
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
 }
