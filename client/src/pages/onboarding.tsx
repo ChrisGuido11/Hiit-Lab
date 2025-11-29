@@ -76,8 +76,8 @@ export default function Onboarding() {
               key={level}
               className={cn(
                 "p-4 border-2 cursor-pointer transition-all duration-200 flex items-center justify-between",
-                preferences.fitnessLevel === level 
-                  ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(204,255,0,0.15)]" 
+                preferences.fitnessLevel === level
+                  ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(0,229,255,0.15)]"
                   : "border-border/50 bg-card/50 hover:border-primary/50"
               )}
               onClick={() => handleSelect("fitnessLevel", level)}
@@ -100,8 +100,8 @@ export default function Onboarding() {
               key={item}
               className={cn(
                 "p-4 border-2 cursor-pointer transition-all duration-200 flex flex-col items-center justify-center gap-2 aspect-square",
-                preferences.equipment.includes(item) 
-                  ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(204,255,0,0.15)]" 
+                preferences.equipment.includes(item)
+                  ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(0,229,255,0.15)]"
                   : "border-border/50 bg-card/50 hover:border-primary/50"
               )}
               onClick={() => toggleEquipment(item)}
@@ -131,8 +131,8 @@ export default function Onboarding() {
               key={goal.id}
               className={cn(
                 "p-5 border-2 cursor-pointer transition-all duration-200 flex items-center gap-4",
-                preferences.goalFocus === goal.id 
-                  ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(204,255,0,0.15)]" 
+                preferences.goalFocus === goal.id
+                  ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(0,229,255,0.15)]"
                   : "border-border/50 bg-card/50 hover:border-primary/50"
               )}
               onClick={() => handleSelect("goalFocus", goal.id)}

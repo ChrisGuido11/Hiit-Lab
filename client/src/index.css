@@ -43,24 +43,24 @@
   --popover: 0 0% 8%;
   --popover-foreground: 0 0% 98%;
   
-  --primary: 75 100% 50%; /* #ccff00 Neon Lime */
+  --primary: 186 100% 50%; /* #00E5FF Neon Teal */
   --primary-foreground: 0 0% 0%;
-  
+
   --secondary: 0 0% 15%;
   --secondary-foreground: 0 0% 98%;
-  
+
   --muted: 0 0% 15%;
   --muted-foreground: 0 0% 65%;
-  
-  --accent: 75 100% 50%;
+
+  --accent: 186 100% 50%;
   --accent-foreground: 0 0% 0%;
-  
+
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 98%;
 
   --border: 0 0% 20%;
   --input: 0 0% 20%;
-  --ring: 75 100% 50%;
+  --ring: 186 100% 50%;
 
   --radius: 1rem;
 }
@@ -83,11 +83,11 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .neon-text {
-  text-shadow: 0 0 10px rgba(204, 255, 0, 0.5);
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
 }
 
 .neon-border {
-  box-shadow: 0 0 15px rgba(204, 255, 0, 0.2);
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.2);
 }
 
 /* Custom scrollbar for webkit */

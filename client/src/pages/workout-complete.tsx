@@ -112,7 +112,7 @@ export default function WorkoutComplete() {
                 className={cn(
                   "aspect-square rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-1",
                   selectedRPE === rpe
-                    ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(204,255,0,0.2)]"
+                    ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(0,229,255,0.2)]"
                     : "border-border/50 bg-card/50 hover:border-primary/50"
                 )}
                 data-testid={`rpe-${rpe}`}
