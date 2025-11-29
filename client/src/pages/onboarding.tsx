@@ -2,12 +2,84 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, Check, Dumbbell, Clock, Activity } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  Dumbbell,
+  Clock,
+  Activity,
+  User,
+  Weight,
+  Circle,
+  AlignVerticalJustifyStart,
+  RectangleHorizontal,
+  CircleDot,
+  Cable,
+  MonitorPlay,
+  Bike,
+  Waves,
+  TrendingUp,
+  Disc,
+  Box,
+  Cog
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import MobileLayout from "@/components/layout/mobile-layout";
+
+/**
+ * EQUIPMENT CONFIGURATION
+ * ========================
+ * Comprehensive equipment list for HIIT/strength workouts.
+ *
+ * Current Equipment Options (expanded from 6 to 16):
+ * - Bodyweight (no equipment)
+ * - Dumbbells
+ * - Kettlebells
+ * - Resistance Bands
+ * - Barbell
+ * - Pull-Up Bar
+ * - Bench
+ * - Medicine Ball
+ * - Jump Rope
+ * - Treadmill
+ * - Stationary Bike
+ * - Rower
+ * - Elliptical
+ * - Sliders
+ * - Step/Box
+ * - Weight Machines
+ *
+ * Storage: PostgreSQL JSONB array (schema.ts: profiles.equipment)
+ * Icon Library: lucide-react
+ * Multi-select: Supported
+ *
+ * Icon Mapping Notes:
+ * - All icons from lucide-react library (no new dependencies)
+ * - Chosen for visual clarity and best semantic match
+ * - Some equipment types use approximate icons where exact matches don't exist
+ *   (e.g., Circle for medicine ball, Waves for rower, Disc for sliders)
+ */
+const EQUIPMENT_OPTIONS = [
+  { key: "bodyweight", label: "Bodyweight", icon: User },
+  { key: "dumbbells", label: "Dumbbells", icon: Dumbbell },
+  { key: "kettlebells", label: "Kettlebells", icon: Weight },
+  { key: "resistance_bands", label: "Resistance Bands", icon: Cable },
+  { key: "barbell", label: "Barbell", icon: TrendingUp },
+  { key: "pull_up_bar", label: "Pull-Up Bar", icon: AlignVerticalJustifyStart },
+  { key: "bench", label: "Bench", icon: RectangleHorizontal },
+  { key: "medicine_ball", label: "Medicine Ball", icon: CircleDot },
+  { key: "jump_rope", label: "Jump Rope", icon: Cable },
+  { key: "treadmill", label: "Treadmill", icon: MonitorPlay },
+  { key: "stationary_bike", label: "Stationary Bike", icon: Bike },
+  { key: "rower", label: "Rower", icon: Waves },
+  { key: "elliptical", label: "Elliptical", icon: Activity },
+  { key: "sliders", label: "Sliders", icon: Disc },
+  { key: "step_or_box", label: "Step/Box", icon: Box },
+  { key: "weight_machines", label: "Weight Machines", icon: Cog },
+] as const;
 
 export default function Onboarding() {
   const [step, setStep] = useState(0);
@@ -94,26 +166,29 @@ export default function Onboarding() {
       title: "Equipment",
       subtitle: "What do you have access to?",
       component: (
-        <div className="grid grid-cols-2 gap-3">
-          {["Dumbbells", "Kettlebell", "Pull-up Bar", "Jump Rope", "Box", "None (Bodyweight)"].map((item) => (
-            <Card 
-              key={item}
-              className={cn(
-                "p-4 border-2 cursor-pointer transition-all duration-200 flex flex-col items-center justify-center gap-2 aspect-square",
-                preferences.equipment.includes(item)
-                  ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(0,229,255,0.15)]"
-                  : "border-border/50 bg-card/50 hover:border-primary/50"
-              )}
-              onClick={() => toggleEquipment(item)}
-              data-testid={`option-equipment-${item.toLowerCase().replace(/\s+/g, '-')}`}
-            >
-              <Dumbbell className={cn(
-                "w-8 h-8",
-                preferences.equipment.includes(item) ? "text-primary" : "text-muted-foreground"
-              )} />
-              <span className="text-sm font-bold text-center leading-tight">{item}</span>
-            </Card>
-          ))}
+        <div className="grid grid-cols-2 gap-3 overflow-y-auto max-h-[calc(100vh-22rem)] pr-1">
+          {EQUIPMENT_OPTIONS.map((equipment) => {
+            const IconComponent = equipment.icon;
+            return (
+              <Card
+                key={equipment.key}
+                className={cn(
+                  "p-4 border-2 cursor-pointer transition-all duration-200 flex flex-col items-center justify-center gap-2 aspect-square",
+                  preferences.equipment.includes(equipment.key)
+                    ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(0,229,255,0.15)]"
+                    : "border-border/50 bg-card/50 hover:border-primary/50"
+                )}
+                onClick={() => toggleEquipment(equipment.key)}
+                data-testid={`option-equipment-${equipment.key}`}
+              >
+                <IconComponent className={cn(
+                  "w-8 h-8",
+                  preferences.equipment.includes(equipment.key) ? "text-primary" : "text-muted-foreground"
+                )} />
+                <span className="text-sm font-bold text-center leading-tight">{equipment.label}</span>
+              </Card>
+            );
+          })}
         </div>
       )
     },

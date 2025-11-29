@@ -11,6 +11,41 @@ import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
+/**
+ * Equipment display mapping for backward compatibility
+ * Handles both old and new equipment formats and returns user-friendly labels
+ */
+const EQUIPMENT_DISPLAY_MAP: Record<string, string> = {
+  // Old format
+  "None (Bodyweight)": "Bodyweight",
+  "Dumbbells": "Dumbbells",
+  "Kettlebell": "Kettlebells",
+  "Pull-up Bar": "Pull-Up Bar",
+  "Jump Rope": "Jump Rope",
+  "Box": "Step/Box",
+  // New format
+  "bodyweight": "Bodyweight",
+  "dumbbells": "Dumbbells",
+  "kettlebells": "Kettlebells",
+  "resistance_bands": "Resistance Bands",
+  "barbell": "Barbell",
+  "pull_up_bar": "Pull-Up Bar",
+  "bench": "Bench",
+  "medicine_ball": "Medicine Ball",
+  "jump_rope": "Jump Rope",
+  "treadmill": "Treadmill",
+  "stationary_bike": "Stationary Bike",
+  "rower": "Rower",
+  "elliptical": "Elliptical",
+  "sliders": "Sliders",
+  "step_or_box": "Step/Box",
+  "weight_machines": "Weight Machines",
+};
+
+function getEquipmentLabel(key: string): string {
+  return EQUIPMENT_DISPLAY_MAP[key] || key;
+}
+
 export default function Profile() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
@@ -142,7 +177,7 @@ export default function Profile() {
               <div className="flex justify-between items-start">
                 <span className="text-muted-foreground">Equipment</span>
                 <span className="font-bold text-white text-right max-w-[60%]">
-                  {(profile.equipment as string[]).join(", ")}
+                  {(profile.equipment as string[]).map(getEquipmentLabel).join(", ")}
                 </span>
               </div>
             </div>
