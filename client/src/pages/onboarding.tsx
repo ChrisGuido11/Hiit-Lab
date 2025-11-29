@@ -1,23 +1,45 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Check, Dumbbell, Clock, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import MobileLayout from "@/components/layout/mobile-layout";
-
-// Mock user preferences storage (local storage wrapper)
-const PREFS_KEY = "emom_user_prefs";
 
 export default function Onboarding() {
   const [step, setStep] = useState(0);
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
   const [preferences, setPreferences] = useState({
     fitnessLevel: "",
     equipment: [] as string[],
-    duration: 10,
-    goal: ""
+    goalFocus: ""
+  });
+
+  const createProfileMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await fetch("/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to create profile");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
+      toast({ title: "Profile Created!", description: "Let's start training!" });
+      setLocation("/");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
   const handleSelect = (key: string, value: any) => {
@@ -35,12 +57,11 @@ export default function Onboarding() {
   };
 
   const nextStep = () => {
-    if (step < 3) {
+    if (step < 2) {
       setStep(step + 1);
     } else {
-      // Save and finish
-      localStorage.setItem(PREFS_KEY, JSON.stringify(preferences));
-      setLocation("/");
+      // Save to backend
+      createProfileMutation.mutate(preferences);
     }
   };
 
@@ -60,6 +81,7 @@ export default function Onboarding() {
                   : "border-border/50 bg-card/50 hover:border-primary/50"
               )}
               onClick={() => handleSelect("fitnessLevel", level)}
+              data-testid={`option-fitness-${level.toLowerCase()}`}
             >
               <span className="text-lg font-bold tracking-wide">{level}</span>
               {preferences.fitnessLevel === level && <Check className="text-primary" size={20} />}
@@ -83,6 +105,7 @@ export default function Onboarding() {
                   : "border-border/50 bg-card/50 hover:border-primary/50"
               )}
               onClick={() => toggleEquipment(item)}
+              data-testid={`option-equipment-${item.toLowerCase().replace(/\s+/g, '-')}`}
             >
               <Dumbbell className={cn(
                 "w-8 h-8",
@@ -91,33 +114,6 @@ export default function Onboarding() {
               <span className="text-sm font-bold text-center leading-tight">{item}</span>
             </Card>
           ))}
-        </div>
-      )
-    },
-    {
-      title: "Duration",
-      subtitle: "How much time do you have?",
-      component: (
-        <div className="space-y-6 py-8">
-          <div className="flex justify-between text-muted-foreground font-display text-xl">
-            <span>5 MIN</span>
-            <span>30 MIN</span>
-          </div>
-          <input 
-            type="range" 
-            min="5" 
-            max="30" 
-            step="1"
-            value={preferences.duration}
-            onChange={(e) => handleSelect("duration", parseInt(e.target.value))}
-            className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
-          />
-          <div className="text-center">
-            <span className="text-6xl font-display font-bold text-primary neon-text">
-              {preferences.duration}
-            </span>
-            <span className="text-xl font-display text-muted-foreground ml-2">MINUTES</span>
-          </div>
         </div>
       )
     },
@@ -135,14 +131,15 @@ export default function Onboarding() {
               key={goal.id}
               className={cn(
                 "p-5 border-2 cursor-pointer transition-all duration-200 flex items-center gap-4",
-                preferences.goal === goal.id 
+                preferences.goalFocus === goal.id 
                   ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(204,255,0,0.15)]" 
                   : "border-border/50 bg-card/50 hover:border-primary/50"
               )}
-              onClick={() => handleSelect("goal", goal.id)}
+              onClick={() => handleSelect("goalFocus", goal.id)}
+              data-testid={`option-goal-${goal.id}`}
             >
               <goal.icon className={cn(
-                preferences.goal === goal.id ? "text-primary" : "text-muted-foreground"
+                preferences.goalFocus === goal.id ? "text-primary" : "text-muted-foreground"
               )} />
               <span className="text-lg font-bold tracking-wide">{goal.label}</span>
             </Card>
@@ -197,10 +194,12 @@ export default function Onboarding() {
           onClick={nextStep}
           disabled={
             (step === 0 && !preferences.fitnessLevel) ||
-            (step === 3 && !preferences.goal)
+            (step === 2 && !preferences.goalFocus) ||
+            createProfileMutation.isPending
           }
+          data-testid="button-next"
         >
-          {step === steps.length - 1 ? "Start Training" : "Next"}
+          {createProfileMutation.isPending ? "Saving..." : step === steps.length - 1 ? "Start Training" : "Next"}
           <ArrowRight className="ml-2 w-5 h-5" />
         </Button>
       </div>

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, Dumbbell, Timer, History, Settings } from "lucide-react";
+import { Home, Timer, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function BottomNav() {
@@ -7,14 +7,14 @@ export default function BottomNav() {
 
   const navItems = [
     { icon: Home, label: "Home", path: "/" },
-    { icon: Timer, label: "Workout", path: "/workout" }, // Direct link for prototype
-    { icon: History, label: "History", path: "/history" },
+    { icon: Timer, label: "Workout", path: "/workout" },
+    { icon: User, label: "Profile", path: "/profile" },
   ];
 
   return (
     <nav className="h-16 glass-panel border-t border-border/40 flex items-center justify-around px-4 pb-safe">
       {navItems.map((item) => {
-        const isActive = location === item.path;
+        const isActive = location === item.path || (item.path === "/workout" && location.startsWith("/workout"));
         return (
           <Link key={item.path} href={item.path}>
             <div className={cn(

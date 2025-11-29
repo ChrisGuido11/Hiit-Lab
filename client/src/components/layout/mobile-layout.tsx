@@ -1,9 +1,8 @@
 import { ReactNode } from "react";
 import { useLocation } from "wouter";
-import { cn } from "@/lib/utils";
-import BottomNav from "./bottom-nav";
 import { AnimatePresence, motion } from "framer-motion";
 import backgroundTexture from "@assets/generated_images/dark_abstract_carbon_fiber_texture_for_app_background.png";
+import BottomNav from "@/components/layout/bottom-nav";
 
 interface MobileLayoutProps {
   children: ReactNode;
