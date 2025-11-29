@@ -130,6 +130,7 @@ const EXERCISES: Exercise[] = [
 ];
 
 export interface GeneratedWorkout {
+  framework: "EMOM" | "Tabata" | "AMRAP" | "Circuit";
   durationMinutes: number;
   difficultyTag: "beginner" | "intermediate" | "advanced";
   focusLabel: string;
@@ -140,6 +141,11 @@ export interface GeneratedWorkout {
     difficulty: string;
     reps: number;
   }>;
+  // Framework-specific metadata
+  workSeconds?: number; // For Tabata: work duration per interval
+  restSeconds?: number; // For Tabata/Circuit: rest duration
+  sets?: number; // For Tabata: number of intervals per exercise
+  totalRounds?: number; // For Circuit: number of complete rounds
 }
 
 
@@ -302,10 +308,359 @@ export function generateEMOMWorkout(
   const focusLabel = goalConfig?.label ?? goalFocus ?? "General Fitness";
 
   return {
+    framework: "EMOM",
     durationMinutes,
     difficultyTag,
     focusLabel,
     rounds,
+  };
+}
+
+/**
+ * TABATA WORKOUT GENERATOR
+ * ========================
+ * Tabata Format: 20 seconds work, 10 seconds rest, 8 rounds per exercise
+ * Classic Tabata = 4 minutes per exercise (8 x 30s intervals)
+ * Typically 2-3 exercises for 8-12 minute total workout
+ */
+export function generateTabataWorkout(
+  skillScore: number,
+  fitnessLevel: string,
+  equipment: string[],
+  goalFocus: string | null,
+  primaryGoal?: PrimaryGoalId | null,
+  goalWeights?: Record<PrimaryGoalId, number>
+): GeneratedWorkout {
+  // Migrate legacy goalFocus to new primaryGoal if needed
+  let resolvedPrimaryGoal = primaryGoal || migrateLegacyGoal(goalFocus);
+
+  // Migrate equipment values to new typed format for backward compatibility
+  const migratedEquipment: EquipmentId[] = migrateEquipment(equipment);
+  const equipmentSet = new Set<EquipmentId>(migratedEquipment);
+
+  // Get equipment richness to adjust difficulty
+  const equipmentRichness = getEquipmentRichness(migratedEquipment);
+
+  // Get goal configuration
+  const goalConfig = resolvedPrimaryGoal ? getPrimaryGoalConfig(resolvedPrimaryGoal) : null;
+
+  // Determine difficulty tier
+  let difficultyTag: "beginner" | "intermediate" | "advanced";
+  if (skillScore <= 35) {
+    difficultyTag = "beginner";
+  } else if (skillScore <= 70) {
+    difficultyTag = "intermediate";
+  } else {
+    difficultyTag = "advanced";
+  }
+
+  // Tabata: 2-3 exercises (8-12 minutes total)
+  // Each exercise is 4 minutes (8 rounds of 20s work / 10s rest)
+  let numExercises: number;
+  if (difficultyTag === "beginner") {
+    numExercises = 2; // 8 minutes
+  } else if (difficultyTag === "intermediate") {
+    numExercises = 2 + Math.floor(Math.random() * 2); // 2-3 exercises (8-12 minutes)
+  } else {
+    numExercises = 3; // 12 minutes
+  }
+
+  const durationMinutes = numExercises * 4; // 4 minutes per exercise
+
+  // Get exercise bias from goal weights
+  const exerciseBias = goalWeights && resolvedPrimaryGoal
+    ? getCombinedExerciseBias(goalWeights)
+    : goalConfig?.exerciseBias ?? { compound: 0.5, cardio: 0.7, plyometric: 0.7, mobility: 0.1 };
+
+  // Filter exercises by equipment and difficulty - Tabata needs high-intensity exercises
+  const availableExercises = EXERCISES.filter((ex) => {
+    const hasAllEquipment = ex.equipment.every(eq => equipmentSet.has(eq));
+    if (!hasAllEquipment) return false;
+
+    // Tabata works best with cardio and plyometric exercises
+    if (!ex.categories.cardio && !ex.categories.plyometric && !ex.categories.compound) return false;
+
+    // Filter by difficulty tier
+    if (difficultyTag === "beginner" && ex.difficulty === "advanced") return false;
+    if (difficultyTag === "beginner" && ex.difficulty === "intermediate" && Math.random() > 0.3) return false;
+
+    return true;
+  });
+
+  // Generate exercises
+  const rounds: GeneratedWorkout['rounds'] = [];
+  const selectedExercises: Exercise[] = [];
+
+  // Select unique exercises
+  for (let i = 0; i < numExercises; i++) {
+    const candidates = availableExercises.filter(ex => !selectedExercises.includes(ex));
+    const exercise = weightedRandomSelection(
+      candidates.length > 0 ? candidates : availableExercises,
+      (ex) => calculateExerciseFitnessScore(ex, exerciseBias)
+    );
+    selectedExercises.push(exercise);
+  }
+
+  // Create rounds: each exercise gets 8 intervals (4 minutes)
+  let minuteIndex = 0;
+  for (const exercise of selectedExercises) {
+    // Each Tabata exercise has 8 rounds of 20s work / 10s rest
+    for (let round = 0; round < 8; round++) {
+      rounds.push({
+        minuteIndex: minuteIndex++,
+        exerciseName: exercise.name,
+        targetMuscleGroup: exercise.muscleGroup,
+        difficulty: exercise.difficulty,
+        reps: Math.ceil(exercise.reps[difficultyTag] * 0.4), // Fewer reps due to shorter work period
+      });
+    }
+  }
+
+  const focusLabel = goalConfig?.label ?? goalFocus ?? "General Fitness";
+
+  return {
+    framework: "Tabata",
+    durationMinutes,
+    difficultyTag,
+    focusLabel,
+    rounds,
+    workSeconds: 20,
+    restSeconds: 10,
+    sets: 8,
+  };
+}
+
+/**
+ * AMRAP WORKOUT GENERATOR
+ * ========================
+ * AMRAP Format: As Many Rounds As Possible in a set time
+ * User continuously repeats a circuit of exercises for the duration
+ * Typically 10-20 minutes with 3-6 exercises per circuit
+ */
+export function generateAMRAPWorkout(
+  skillScore: number,
+  fitnessLevel: string,
+  equipment: string[],
+  goalFocus: string | null,
+  primaryGoal?: PrimaryGoalId | null,
+  goalWeights?: Record<PrimaryGoalId, number>
+): GeneratedWorkout {
+  // Migrate legacy goalFocus to new primaryGoal if needed
+  let resolvedPrimaryGoal = primaryGoal || migrateLegacyGoal(goalFocus);
+
+  // Migrate equipment values to new typed format for backward compatibility
+  const migratedEquipment: EquipmentId[] = migrateEquipment(equipment);
+  const equipmentSet = new Set<EquipmentId>(migratedEquipment);
+
+  // Get equipment richness to adjust difficulty
+  const equipmentRichness = getEquipmentRichness(migratedEquipment);
+
+  // Get goal configuration
+  const goalConfig = resolvedPrimaryGoal ? getPrimaryGoalConfig(resolvedPrimaryGoal) : null;
+
+  // Determine difficulty tier
+  let difficultyTag: "beginner" | "intermediate" | "advanced";
+  if (skillScore <= 35) {
+    difficultyTag = "beginner";
+  } else if (skillScore <= 70) {
+    difficultyTag = "intermediate";
+  } else {
+    difficultyTag = "advanced";
+  }
+
+  // AMRAP: 10-20 minutes typical duration
+  let durationMinutes: number;
+  if (difficultyTag === "beginner") {
+    durationMinutes = 10 + Math.floor(Math.random() * 3); // 10-12 minutes
+  } else if (difficultyTag === "intermediate") {
+    durationMinutes = 12 + Math.floor(Math.random() * 5); // 12-16 minutes
+  } else {
+    durationMinutes = 15 + Math.floor(Math.random() * 6); // 15-20 minutes
+  }
+
+  // Get exercise bias from goal weights
+  const exerciseBias = goalWeights && resolvedPrimaryGoal
+    ? getCombinedExerciseBias(goalWeights)
+    : goalConfig?.exerciseBias ?? { compound: 0.6, cardio: 0.6, plyometric: 0.5, mobility: 0.2 };
+
+  // Filter exercises by equipment and difficulty
+  const availableExercises = EXERCISES.filter((ex) => {
+    const hasAllEquipment = ex.equipment.every(eq => equipmentSet.has(eq));
+    if (!hasAllEquipment) return false;
+
+    // Filter by difficulty tier
+    if (difficultyTag === "beginner" && ex.difficulty === "advanced") return false;
+    if (difficultyTag === "beginner" && ex.difficulty === "intermediate" && Math.random() > 0.3) return false;
+
+    return true;
+  });
+
+  // AMRAP circuit: 3-6 exercises
+  let numExercises: number;
+  if (difficultyTag === "beginner") {
+    numExercises = 3;
+  } else if (difficultyTag === "intermediate") {
+    numExercises = 4 + Math.floor(Math.random() * 2); // 4-5
+  } else {
+    numExercises = 5 + Math.floor(Math.random() * 2); // 5-6
+  }
+
+  // Select exercises for the circuit
+  const rounds: GeneratedWorkout['rounds'] = [];
+  const circuitExercises: Exercise[] = [];
+
+  for (let i = 0; i < numExercises; i++) {
+    const candidates = availableExercises.filter(ex => !circuitExercises.includes(ex));
+    const exercise = weightedRandomSelection(
+      candidates.length > 0 ? candidates : availableExercises,
+      (ex) => calculateExerciseFitnessScore(ex, exerciseBias)
+    );
+    circuitExercises.push(exercise);
+  }
+
+  // Create rounds array (the circuit repeats for duration)
+  // Store as single circuit that user repeats
+  for (let i = 0; i < circuitExercises.length; i++) {
+    const exercise = circuitExercises[i];
+    rounds.push({
+      minuteIndex: i,
+      exerciseName: exercise.name,
+      targetMuscleGroup: exercise.muscleGroup,
+      difficulty: exercise.difficulty,
+      reps: exercise.reps[difficultyTag],
+    });
+  }
+
+  const focusLabel = goalConfig?.label ?? goalFocus ?? "General Fitness";
+
+  return {
+    framework: "AMRAP",
+    durationMinutes,
+    difficultyTag,
+    focusLabel,
+    rounds,
+  };
+}
+
+/**
+ * CIRCUIT WORKOUT GENERATOR
+ * ==========================
+ * Circuit Format: Set number of rounds through a series of exercises
+ * Rest between rounds, typically 3-5 rounds of 4-8 exercises
+ * Total duration: 15-30 minutes
+ */
+export function generateCircuitWorkout(
+  skillScore: number,
+  fitnessLevel: string,
+  equipment: string[],
+  goalFocus: string | null,
+  primaryGoal?: PrimaryGoalId | null,
+  goalWeights?: Record<PrimaryGoalId, number>
+): GeneratedWorkout {
+  // Migrate legacy goalFocus to new primaryGoal if needed
+  let resolvedPrimaryGoal = primaryGoal || migrateLegacyGoal(goalFocus);
+
+  // Migrate equipment values to new typed format for backward compatibility
+  const migratedEquipment: EquipmentId[] = migrateEquipment(equipment);
+  const equipmentSet = new Set<EquipmentId>(migratedEquipment);
+
+  // Get equipment richness to adjust difficulty
+  const equipmentRichness = getEquipmentRichness(migratedEquipment);
+
+  // Get goal configuration
+  const goalConfig = resolvedPrimaryGoal ? getPrimaryGoalConfig(resolvedPrimaryGoal) : null;
+
+  // Determine difficulty tier
+  let difficultyTag: "beginner" | "intermediate" | "advanced";
+  if (skillScore <= 35) {
+    difficultyTag = "beginner";
+  } else if (skillScore <= 70) {
+    difficultyTag = "intermediate";
+  } else {
+    difficultyTag = "advanced";
+  }
+
+  // Circuit: 3-5 rounds
+  let totalRounds: number;
+  if (difficultyTag === "beginner") {
+    totalRounds = 3;
+  } else if (difficultyTag === "intermediate") {
+    totalRounds = 3 + Math.floor(Math.random() * 2); // 3-4 rounds
+  } else {
+    totalRounds = 4 + Math.floor(Math.random() * 2); // 4-5 rounds
+  }
+
+  // Get exercise bias from goal weights
+  const exerciseBias = goalWeights && resolvedPrimaryGoal
+    ? getCombinedExerciseBias(goalWeights)
+    : goalConfig?.exerciseBias ?? { compound: 0.7, cardio: 0.4, plyometric: 0.4, mobility: 0.3 };
+
+  // Filter exercises by equipment and difficulty
+  const availableExercises = EXERCISES.filter((ex) => {
+    const hasAllEquipment = ex.equipment.every(eq => equipmentSet.has(eq));
+    if (!hasAllEquipment) return false;
+
+    // Filter by difficulty tier
+    if (difficultyTag === "beginner" && ex.difficulty === "advanced") return false;
+    if (difficultyTag === "beginner" && ex.difficulty === "intermediate" && Math.random() > 0.3) return false;
+
+    return true;
+  });
+
+  // Circuit exercises: 4-8 exercises per round
+  let exercisesPerRound: number;
+  if (difficultyTag === "beginner") {
+    exercisesPerRound = 4 + Math.floor(Math.random() * 2); // 4-5
+  } else if (difficultyTag === "intermediate") {
+    exercisesPerRound = 5 + Math.floor(Math.random() * 2); // 5-6
+  } else {
+    exercisesPerRound = 6 + Math.floor(Math.random() * 3); // 6-8
+  }
+
+  // Select exercises for the circuit
+  const circuitExercises: Exercise[] = [];
+
+  for (let i = 0; i < exercisesPerRound; i++) {
+    const candidates = availableExercises.filter(ex => !circuitExercises.includes(ex));
+    const exercise = weightedRandomSelection(
+      candidates.length > 0 ? candidates : availableExercises,
+      (ex) => calculateExerciseFitnessScore(ex, exerciseBias)
+    );
+    circuitExercises.push(exercise);
+  }
+
+  // Create rounds array (circuit repeated for totalRounds)
+  const rounds: GeneratedWorkout['rounds'] = [];
+  let minuteIndex = 0;
+
+  for (let round = 0; round < totalRounds; round++) {
+    for (const exercise of circuitExercises) {
+      rounds.push({
+        minuteIndex: minuteIndex++,
+        exerciseName: exercise.name,
+        targetMuscleGroup: exercise.muscleGroup,
+        difficulty: exercise.difficulty,
+        reps: exercise.reps[difficultyTag],
+      });
+    }
+  }
+
+  // Calculate total duration (estimate: ~45s per exercise + rest between rounds)
+  const restBetweenRounds = difficultyTag === "beginner" ? 90 : difficultyTag === "intermediate" ? 60 : 45;
+  const durationMinutes = Math.ceil(
+    (exercisesPerRound * 0.75 * totalRounds) + ((totalRounds - 1) * restBetweenRounds / 60)
+  );
+
+  const focusLabel = goalConfig?.label ?? goalFocus ?? "General Fitness";
+
+  return {
+    framework: "Circuit",
+    durationMinutes,
+    difficultyTag,
+    focusLabel,
+    rounds,
+    restSeconds: restBetweenRounds,
+    totalRounds,
   };
 }
 

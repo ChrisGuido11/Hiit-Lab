@@ -79,11 +79,15 @@ export const insertProfileSchema = createInsertSchema(profiles).omit({
 export type InsertProfile = z.infer<typeof insertProfileSchema>;
 export type Profile = typeof profiles.$inferSelect;
 
+// Workout framework type
+export const workoutFrameworks = ["EMOM", "Tabata", "AMRAP", "Circuit"] as const;
+export type WorkoutFramework = typeof workoutFrameworks[number];
+
 // Workout sessions table
 export const workoutSessions = pgTable("workout_sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
-  framework: text("framework").default("EMOM").notNull(),
+  framework: text("framework").default("EMOM").notNull().$type<WorkoutFramework>(),
   durationMinutes: integer("duration_minutes").notNull(),
   difficultyTag: text("difficulty_tag").notNull(), // "beginner", "intermediate", "advanced"
   focusLabel: text("focus_label").notNull(), // "cardio", "strength", "metcon"
@@ -100,10 +104,14 @@ export const workoutSessionsRelations = relations(workoutSessions, ({ one, many 
   rounds: many(workoutRounds),
 }));
 
-export const insertWorkoutSessionSchema = createInsertSchema(workoutSessions).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertWorkoutSessionSchema = createInsertSchema(workoutSessions)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .extend({
+    framework: z.enum(workoutFrameworks),
+  });
 
 export type InsertWorkoutSession = z.infer<typeof insertWorkoutSessionSchema>;
 export type WorkoutSession = typeof workoutSessions.$inferSelect;

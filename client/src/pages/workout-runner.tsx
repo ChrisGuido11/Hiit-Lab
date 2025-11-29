@@ -10,8 +10,10 @@ import { cn } from "@/lib/utils";
 export default function WorkoutRunner() {
   const [, setLocation] = useLocation();
   const [isActive, setIsActive] = useState(false);
-  const [currentMinute, setCurrentMinute] = useState(1);
-  const [secondsLeft, setSecondsLeft] = useState(60);
+  const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [isResting, setIsResting] = useState(false); // For Tabata work/rest phases
+  const [completedRounds, setCompletedRounds] = useState(0); // For AMRAP/Circuit tracking
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const { data: workout } = useQuery({
@@ -21,35 +23,128 @@ export default function WorkoutRunner() {
   useEffect(() => {
     if (!workout) {
       setLocation("/");
+    } else {
+      // Initialize timer based on framework
+      if (workout.framework === "EMOM") {
+        setSecondsLeft(60);
+      } else if (workout.framework === "Tabata") {
+        setSecondsLeft(workout.workSeconds || 20);
+      } else if (workout.framework === "AMRAP") {
+        setSecondsLeft(workout.durationMinutes * 60);
+      } else if (workout.framework === "Circuit") {
+        setSecondsLeft(45); // ~45 seconds per exercise
+      }
     }
   }, [workout, setLocation]);
 
   useEffect(() => {
+    if (!workout) return;
+
     if (isActive && secondsLeft > 0) {
       timerRef.current = setTimeout(() => setSecondsLeft(s => s - 1), 1000);
     } else if (secondsLeft === 0) {
-      if (currentMinute < (workout?.durationMinutes || 0)) {
-        setCurrentMinute(m => m + 1);
-        setSecondsLeft(60);
-      } else {
-        // Workout complete - navigate to complete screen
-        setLocation("/workout/complete");
-      }
+      handleIntervalComplete();
     }
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [isActive, secondsLeft, currentMinute, workout, setLocation]);
+  }, [isActive, secondsLeft, currentRoundIndex, workout, isResting]);
+
+  const handleIntervalComplete = () => {
+    if (!workout) return;
+
+    if (workout.framework === "EMOM") {
+      // EMOM: Move to next minute
+      if (currentRoundIndex < workout.rounds.length - 1) {
+        setCurrentRoundIndex(i => i + 1);
+        setSecondsLeft(60);
+      } else {
+        setLocation("/workout/complete");
+      }
+    } else if (workout.framework === "Tabata") {
+      // Tabata: Alternate between work and rest
+      if (isResting) {
+        // Rest complete, move to next interval
+        if (currentRoundIndex < workout.rounds.length - 1) {
+          setCurrentRoundIndex(i => i + 1);
+          setSecondsLeft(workout.workSeconds || 20);
+          setIsResting(false);
+        } else {
+          setLocation("/workout/complete");
+        }
+      } else {
+        // Work complete, start rest
+        setSecondsLeft(workout.restSeconds || 10);
+        setIsResting(true);
+      }
+    } else if (workout.framework === "AMRAP") {
+      // AMRAP: Time expired, workout complete
+      setLocation("/workout/complete");
+    } else if (workout.framework === "Circuit") {
+      // Circuit: Move to next exercise or rest between rounds
+      if (currentRoundIndex < workout.rounds.length - 1) {
+        setCurrentRoundIndex(i => i + 1);
+
+        // Check if we completed a full circuit (for rest periods)
+        const exercisesPerRound = workout.rounds.length / (workout.totalRounds || 1);
+        if ((currentRoundIndex + 1) % exercisesPerRound === 0 && currentRoundIndex < workout.rounds.length - 1) {
+          // Rest between rounds
+          setSecondsLeft(workout.restSeconds || 60);
+          setIsResting(true);
+        } else {
+          setSecondsLeft(45);
+          setIsResting(false);
+        }
+      } else {
+        setLocation("/workout/complete");
+      }
+    }
+  };
 
   if (!workout) return null;
 
-  const currentExercise = workout.rounds[currentMinute - 1];
-  const nextExercise = workout.rounds[currentMinute] || null;
+  const currentExercise = workout.rounds[currentRoundIndex];
+  const nextExercise = workout.rounds[currentRoundIndex + 1] || null;
 
   const toggleTimer = () => setIsActive(!isActive);
 
   const formatTime = (s: number) => {
+    if (workout.framework === "AMRAP") {
+      // Show minutes:seconds for AMRAP countdown
+      const mins = Math.floor(s / 60);
+      const secs = s % 60;
+      return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    }
     return s < 10 ? `0${s}` : s;
+  };
+
+  const getProgressText = () => {
+    if (workout.framework === "EMOM") {
+      return `Round ${currentRoundIndex + 1}/${workout.rounds.length}`;
+    } else if (workout.framework === "Tabata") {
+      const currentSet = Math.floor(currentRoundIndex / (workout.sets || 8)) + 1;
+      const totalSets = Math.ceil(workout.rounds.length / (workout.sets || 8));
+      const intervalInSet = (currentRoundIndex % (workout.sets || 8)) + 1;
+      return `Set ${currentSet}/${totalSets} • ${intervalInSet}/${workout.sets || 8}`;
+    } else if (workout.framework === "AMRAP") {
+      return `AMRAP • ${workout.durationMinutes} min`;
+    } else if (workout.framework === "Circuit") {
+      const exercisesPerRound = workout.rounds.length / (workout.totalRounds || 1);
+      const currentRound = Math.floor(currentRoundIndex / exercisesPerRound) + 1;
+      return `Round ${currentRound}/${workout.totalRounds || 1}`;
+    }
+    return "";
+  };
+
+  const getTimerLabel = () => {
+    if (workout.framework === "Tabata") {
+      return isResting ? "Rest" : "Go!";
+    } else if (workout.framework === "AMRAP") {
+      return "Time Left";
+    } else if (workout.framework === "Circuit" && isResting) {
+      return "Rest";
+    }
+    return "Go!";
   };
 
   return (
@@ -61,7 +156,7 @@ export default function WorkoutRunner() {
             <X />
           </Button>
           <div className="text-sm font-bold uppercase tracking-widest text-muted-foreground">
-            Round {currentMinute}/{workout.durationMinutes}
+            {getProgressText()}
           </div>
           <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-white">
             <Settings size={20} />
@@ -87,10 +182,13 @@ export default function WorkoutRunner() {
               className="font-display text-[12rem] leading-none font-bold text-white tracking-tighter tabular-nums"
               style={{ textShadow: "0 0 40px rgba(255,255,255,0.1)" }}
             >
-              :{formatTime(secondsLeft)}
+              {workout.framework === "AMRAP" ? formatTime(secondsLeft) : `:${formatTime(secondsLeft)}`}
             </motion.div>
-            <div className="text-xl uppercase tracking-[0.2em] text-primary font-bold mt-4 neon-text">
-              Go!
+            <div className={cn(
+              "text-xl uppercase tracking-[0.2em] font-bold mt-4 neon-text",
+              isResting ? "text-yellow-500" : "text-primary"
+            )}>
+              {getTimerLabel()}
             </div>
           </div>
         </div>
@@ -124,20 +222,32 @@ export default function WorkoutRunner() {
 
           {/* Controls */}
           <div className="grid grid-cols-3 gap-4">
-             <Button 
-              variant="outline" 
+             <Button
+              variant="outline"
               className="h-14 border-border/50 hover:bg-secondary/50 hover:text-white"
               onClick={() => {
-                setCurrentMinute(1);
-                setSecondsLeft(60);
+                setCurrentRoundIndex(0);
                 setIsActive(false);
+                setIsResting(false);
+                setCompletedRounds(0);
+
+                // Reset timer based on framework
+                if (workout.framework === "EMOM") {
+                  setSecondsLeft(60);
+                } else if (workout.framework === "Tabata") {
+                  setSecondsLeft(workout.workSeconds || 20);
+                } else if (workout.framework === "AMRAP") {
+                  setSecondsLeft(workout.durationMinutes * 60);
+                } else if (workout.framework === "Circuit") {
+                  setSecondsLeft(45);
+                }
               }}
               data-testid="button-restart"
             >
               <RotateCcw />
             </Button>
-            
-            <Button 
+
+            <Button
               className={cn(
                 "h-14 text-lg font-bold uppercase tracking-wider text-black hover:opacity-90 transition-all",
                 isActive ? "bg-white" : "bg-primary neon-border"
@@ -147,14 +257,26 @@ export default function WorkoutRunner() {
             >
               {isActive ? <Pause className="fill-current" /> : <Play className="fill-current" />}
             </Button>
-            
-            <Button 
-              variant="outline" 
+
+            <Button
+              variant="outline"
               className="h-14 border-border/50 hover:bg-secondary/50 hover:text-white"
               onClick={() => {
-                if (currentMinute < workout.durationMinutes) {
-                  setCurrentMinute(m => m + 1);
-                  setSecondsLeft(60);
+                if (workout.framework === "AMRAP") {
+                  // For AMRAP, just complete the workout
+                  setLocation("/workout/complete");
+                } else if (currentRoundIndex < workout.rounds.length - 1) {
+                  setCurrentRoundIndex(i => i + 1);
+                  setIsResting(false);
+
+                  // Reset timer based on framework
+                  if (workout.framework === "EMOM") {
+                    setSecondsLeft(60);
+                  } else if (workout.framework === "Tabata") {
+                    setSecondsLeft(workout.workSeconds || 20);
+                  } else if (workout.framework === "Circuit") {
+                    setSecondsLeft(45);
+                  }
                 } else {
                   setLocation("/workout/complete");
                 }

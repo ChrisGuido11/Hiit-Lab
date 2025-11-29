@@ -2,7 +2,14 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { generateEMOMWorkout, updateSkillScore } from "./utils/emomGenerator";
+import {
+  generateEMOMWorkout,
+  generateTabataWorkout,
+  generateAMRAPWorkout,
+  generateCircuitWorkout,
+  updateSkillScore
+} from "./utils/emomGenerator";
+import { pickFrameworkForGoal } from "@shared/goals";
 import { insertProfileSchema, insertWorkoutSessionSchema } from "@shared/schema";
 import { z } from "zod";
 
@@ -104,14 +111,35 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Profile not found. Please complete onboarding first." });
       }
 
-      const workout = generateEMOMWorkout(
+      // Pick framework based on user's primary goal
+      const selectedFramework = pickFrameworkForGoal(profile.primaryGoal ?? null);
+
+      // Generate workout using appropriate framework generator
+      let workout;
+      const commonParams = [
         profile.skillScore,
         profile.fitnessLevel,
         profile.equipment as string[],
         profile.goalFocus ?? null,
         profile.primaryGoal ?? null,
         profile.goalWeights ?? undefined
-      );
+      ] as const;
+
+      switch (selectedFramework) {
+        case 'tabata':
+          workout = generateTabataWorkout(...commonParams);
+          break;
+        case 'amrap':
+          workout = generateAMRAPWorkout(...commonParams);
+          break;
+        case 'circuit':
+          workout = generateCircuitWorkout(...commonParams);
+          break;
+        case 'emom':
+        default:
+          workout = generateEMOMWorkout(...commonParams);
+          break;
+      }
 
       res.json(workout);
     } catch (error) {
