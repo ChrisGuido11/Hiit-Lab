@@ -95,6 +95,7 @@ export default function Profile() {
       secondaryGoals?: PrimaryGoalId[];
       goalWeights?: Record<PrimaryGoalId, number>;
       skillScore?: number;
+      fitnessLevel?: string;
     }) => {
       const res = await fetch("/api/profile", {
         method: "PATCH",
@@ -233,7 +234,10 @@ export default function Profile() {
 
   const handleSaveLevel = () => {
     const newSkillScore = getLevelSkillScore(editingLevel);
-    updateProfileMutation.mutate({ skillScore: newSkillScore });
+    updateProfileMutation.mutate({ 
+      skillScore: newSkillScore,
+      fitnessLevel: editingLevel 
+    });
   };
 
   if (authLoading) {
