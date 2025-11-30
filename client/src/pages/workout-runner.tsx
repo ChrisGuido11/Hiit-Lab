@@ -16,14 +16,19 @@ export default function WorkoutRunner() {
   const [isResting, setIsResting] = useState(false); // For Tabata work/rest phases
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const { data: workout } = useQuery<GeneratedWorkout>({
+  const { data: workout, isLoading, isError } = useQuery<GeneratedWorkout | null>({
     queryKey: ["/api/workout/generate"],
   });
 
   useEffect(() => {
-    if (!workout) {
+    if (isLoading) return;
+
+    if (isError || workout === null) {
       setLocation("/");
-    } else {
+      return;
+    }
+
+    if (workout) {
       // Initialize timer based on framework
       if (workout.framework === "EMOM") {
         setSecondsLeft(60);
@@ -35,7 +40,7 @@ export default function WorkoutRunner() {
         setSecondsLeft(45); // ~45 seconds per exercise
       }
     }
-  }, [workout, setLocation]);
+  }, [workout, isLoading, isError, setLocation]);
 
   useEffect(() => {
     if (!workout) return;
@@ -101,7 +106,17 @@ export default function WorkoutRunner() {
     }
   };
 
-  if (!workout) return null;
+  if (isLoading || workout === undefined) {
+    return (
+      <MobileLayout hideNav>
+        <div className="flex items-center justify-center h-full">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </MobileLayout>
+    );
+  }
+
+  if (isError || workout === null) return null;
 
   const currentExercise = workout.rounds[currentRoundIndex];
   const nextExercise = workout.rounds[currentRoundIndex + 1] || null;
