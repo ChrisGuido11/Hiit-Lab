@@ -111,13 +111,38 @@ export default function WorkoutLab() {
     }
   };
 
+  const handleProfileSetup = () => {
+    setLocation("/onboarding");
+  };
+
+  const handleReturnHome = () => {
+    setLocation("/");
+  };
+
   if (!profile) {
     return (
       <MobileLayout>
         <div className="flex items-center justify-center h-full p-6 text-center">
-          <div>
-            <h2 className="text-2xl font-bold text-white mb-4">Complete Your Profile</h2>
-            <p className="text-muted-foreground">Set up your profile to access the Workout Lab</p>
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-2xl font-bold text-white mb-3">Complete Your Profile</h2>
+              <p className="text-muted-foreground">Set up your profile to access the Workout Lab</p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Button
+                className="w-full bg-primary text-black hover:bg-primary/90 font-bold"
+                onClick={handleProfileSetup}
+              >
+                Start Profile Setup
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full text-muted-foreground hover:text-primary"
+                onClick={handleReturnHome}
+              >
+                Back to Home
+              </Button>
+            </div>
           </div>
         </div>
       </MobileLayout>
