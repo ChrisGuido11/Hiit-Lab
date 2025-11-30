@@ -23,7 +23,8 @@ export default function WorkoutRunner() {
   useEffect(() => {
     if (isLoading) return;
 
-    if (isError || workout === null) {
+    // Redirect only when we definitively don't have workout data
+    if (workout === null || (isError && workout === undefined)) {
       setLocation("/");
       return;
     }
@@ -116,7 +117,7 @@ export default function WorkoutRunner() {
     );
   }
 
-  if (isError || workout === null) return null;
+  if (workout === null || (isError && workout === undefined)) return null;
 
   const currentExercise = workout.rounds[currentRoundIndex];
   const nextExercise = workout.rounds[currentRoundIndex + 1] || null;
