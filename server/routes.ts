@@ -111,8 +111,17 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Profile not found. Please complete onboarding first." });
       }
 
-      // Pick framework based on user's primary goal
-      const selectedFramework = pickFrameworkForGoal(profile.primaryGoal ?? null);
+      // Check for framework override from query parameter
+      const frameworkOverride = req.query.framework as string | undefined;
+
+      let selectedFramework: string;
+      if (frameworkOverride && ['EMOM', 'Tabata', 'AMRAP', 'Circuit'].includes(frameworkOverride)) {
+        // User explicitly chose a framework (from Workout Lab)
+        selectedFramework = frameworkOverride.toLowerCase();
+      } else {
+        // Use AI goal-based selection (Daily WOD)
+        selectedFramework = pickFrameworkForGoal(profile.primaryGoal ?? null);
+      }
 
       // Generate workout using appropriate framework generator
       let workout;

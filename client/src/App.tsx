@@ -8,6 +8,7 @@ import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Onboarding from "@/pages/onboarding";
 import Home from "@/pages/home";
+import WorkoutLab from "@/pages/workout-lab";
 import WorkoutDetail from "@/pages/workout-detail";
 import WorkoutRunner from "@/pages/workout-runner";
 import WorkoutComplete from "@/pages/workout-complete";
@@ -37,6 +38,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/onboarding" component={Onboarding} />
+      <Route path="/workout-lab" component={WorkoutLab} />
       <Route path="/workout" component={WorkoutDetail} />
       <Route path="/workout/runner" component={WorkoutRunner} />
       <Route path="/workout/complete" component={WorkoutComplete} />

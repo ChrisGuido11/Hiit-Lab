@@ -1,16 +1,35 @@
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Play, RotateCw } from "lucide-react";
+import { ArrowLeft, Play, RotateCw, Zap, Flame, Infinity, Repeat } from "lucide-react";
 import MobileLayout from "@/components/layout/mobile-layout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { FRAMEWORK_CONFIGS, Framework } from "@/../../shared/frameworks";
+import type { GeneratedWorkout } from "@/../../shared/schema";
+
+// Icon mapping for frameworks
+const FRAMEWORK_ICONS: Record<Framework, typeof Zap> = {
+  EMOM: Zap,
+  Tabata: Flame,
+  AMRAP: Infinity,
+  Circuit: Repeat,
+};
 
 export default function WorkoutDetail() {
   const [, setLocation] = useLocation();
 
-  const { data: workout, isLoading, refetch } = useQuery({
+  const { data: workout, isLoading, refetch } = useQuery<GeneratedWorkout>({
     queryKey: ["/api/workout/generate"],
   });
+
+  // Get framework config if available
+  const frameworkConfig = workout?.framework
+    ? FRAMEWORK_CONFIGS[workout.framework as Framework]
+    : null;
+  const FrameworkIcon = workout?.framework
+    ? FRAMEWORK_ICONS[workout.framework as Framework]
+    : null;
 
   if (isLoading) {
     return (
@@ -53,6 +72,45 @@ export default function WorkoutDetail() {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Framework Header */}
+          {frameworkConfig && FrameworkIcon && (
+            <Card className="p-4 bg-gradient-to-br from-primary/20 to-transparent border-primary/30">
+              <div className="flex items-start gap-3 mb-3">
+                <div className="h-12 w-12 rounded-lg bg-primary/20 border border-primary flex items-center justify-center flex-shrink-0">
+                  <FrameworkIcon className="text-primary w-6 h-6" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h2 className="text-xl font-bold text-white">{frameworkConfig.fullName}</h2>
+                    <Badge variant="outline" className="text-xs">
+                      {frameworkConfig.name}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {frameworkConfig.description}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <Badge variant="secondary" className="text-xs">
+                  {frameworkConfig.keyFeature}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className={
+                    frameworkConfig.intensityLevel === "high"
+                      ? "border-red-500/50 text-red-400"
+                      : frameworkConfig.intensityLevel === "moderate"
+                      ? "border-yellow-500/50 text-yellow-400"
+                      : "border-green-500/50 text-green-400"
+                  }
+                >
+                  {frameworkConfig.intensityLevel} intensity
+                </Badge>
+              </div>
+            </Card>
+          )}
+
           {/* Summary */}
           <div className="text-center space-y-2">
             <h1 className="text-5xl font-display font-bold text-white uppercase">{workout.focusLabel}</h1>
@@ -93,7 +151,7 @@ export default function WorkoutDetail() {
             data-testid="button-start-emom"
           >
             <Play className="w-5 h-5 mr-2 fill-current" />
-            Start HIIT
+            Start {workout.framework || "HIIT"}
           </Button>
         </div>
       </div>

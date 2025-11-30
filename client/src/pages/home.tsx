@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { Play, Calendar, TrendingUp, Flame, Clock, ArrowRight, RotateCw } from "lucide-react";
+import { Play, Calendar, TrendingUp, Flame, Clock, ArrowRight, RotateCw, Beaker } from "lucide-react";
 import MobileLayout from "@/components/layout/mobile-layout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -139,6 +139,26 @@ export default function Home() {
             </div>
           </Card>
         ) : null}
+
+        {/* Workout Lab CTA */}
+        <Link href="/workout-lab">
+          <Card className="p-5 bg-gradient-to-r from-secondary/50 to-secondary/30 border-border/50 cursor-pointer hover:border-primary/50 transition-all hover:shadow-lg hover:shadow-primary/10">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center">
+                  <Beaker className="text-primary w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white mb-0.5">Workout Lab</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Choose from 4 training frameworks
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="text-muted-foreground w-5 h-5" />
+            </div>
+          </Card>
+        </Link>
 
         {/* Stats Row */}
         <div className="grid grid-cols-2 gap-4">
