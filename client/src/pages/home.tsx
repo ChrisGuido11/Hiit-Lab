@@ -9,7 +9,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import type { GeneratedWorkout } from "@/../../shared/schema";
+import type { GeneratedWorkout, Profile as ProfileModel } from "@/../../shared/schema";
+import { getQueryFn } from "@/lib/queryClient";
 
 function getTimeGreeting(): string {
   const hour = new Date().getHours();
@@ -37,9 +38,10 @@ export default function Home() {
     }
   }, [user, authLoading, toast]);
 
-  const { data: profile } = useQuery({
+  const { data: profile, isLoading: profileLoading } = useQuery<ProfileModel | null>({
     queryKey: ["/api/profile"],
     enabled: !!user,
+    queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
   const { data: workout, isLoading: workoutLoading, refetch: regenerateWorkout } = useQuery<GeneratedWorkout>({
@@ -61,6 +63,16 @@ export default function Home() {
       <MobileLayout>
         <div className="flex items-center justify-center h-full">
           <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </MobileLayout>
+    );
+  }
+
+  if (profileLoading) {
+    return (
+      <MobileLayout>
+        <div className="flex items-center justify-center h-full">
+          <div className="text-muted-foreground">Loading profile...</div>
         </div>
       </MobileLayout>
     );
