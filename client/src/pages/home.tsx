@@ -78,7 +78,7 @@ export default function Home() {
 
   return (
     <MobileLayout>
-      <div className="p-6 pb-24 space-y-8">
+      <div className="p-6 pb-24 space-y-10">
         {/* Header */}
         <div className="flex items-end justify-between">
           <div>
@@ -161,7 +161,7 @@ export default function Home() {
         </Link>
 
         {/* Stats Row */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="mt-4 grid grid-cols-2 gap-4">
           <Card className="p-4 bg-card/50 border-border/50 flex flex-col justify-between">
             <TrendingUp className="text-primary w-6 h-6 mb-3" />
             <div>
