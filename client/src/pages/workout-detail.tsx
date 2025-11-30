@@ -45,11 +45,23 @@ export default function WorkoutDetail() {
     return (
       <MobileLayout hideNav>
         <div className="flex items-center justify-center h-full p-6 text-center">
-          <div>
-            <h2 className="text-2xl font-bold text-white mb-4">No Workout Generated</h2>
-            <Button onClick={() => setLocation("/")} className="bg-primary text-black">
-              Go Home
-            </Button>
+          <div className="space-y-4">
+            <h2 className="text-2xl font-bold text-white">No Workout Ready</h2>
+            <p className="text-muted-foreground max-w-xs mx-auto">
+              Let&rsquo;s build your next HIIT session. Generate a workout to view the full details and start training.
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <Button
+                onClick={() => setLocation("/workout-lab")}
+                className="bg-primary text-black"
+                data-testid="button-generate-workout"
+              >
+                Generate a Workout
+              </Button>
+              <Button variant="outline" onClick={() => setLocation("/")}>
+                Go Home
+              </Button>
+            </div>
           </div>
         </div>
       </MobileLayout>
