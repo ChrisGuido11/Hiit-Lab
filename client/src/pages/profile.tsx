@@ -36,6 +36,8 @@ import { Label } from "@/components/ui/label";
 import { EquipmentSelector } from "@/components/equipment-selector";
 import { getEquipmentLabel, normalizeEquipment, migrateEquipment, type EquipmentId } from "@shared/equipment";
 import { PRIMARY_GOALS, buildGoalWeights, type PrimaryGoalId } from "@shared/goals";
+import type { Profile as ProfileModel, WorkoutRound, WorkoutSession } from "@shared/schema";
+import { getQueryFn } from "@/lib/queryClient";
 
 // Icon mapping for goals
 const GOAL_ICONS = {
@@ -72,14 +74,16 @@ export default function Profile() {
     }
   }, [user, authLoading, toast]);
 
-  const { data: profile } = useQuery({
+  const { data: profile } = useQuery<ProfileModel | null>({
     queryKey: ["/api/profile"],
     enabled: !!user,
+    queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
-  const { data: history = [] } = useQuery({
+  const { data: history = [] } = useQuery<Array<WorkoutSession & { rounds: WorkoutRound[] }>>({
     queryKey: ["/api/workout/history"],
     enabled: !!user,
+    queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
   const updateProfileMutation = useMutation({
@@ -215,8 +219,11 @@ export default function Profile() {
     );
   }
 
-  const totalWorkouts = history.length;
-  const totalMinutes = history.reduce((sum: number, session: any) => sum + session.durationMinutes, 0);
+    const totalWorkouts = history.length;
+    const totalMinutes = history.reduce(
+      (sum, session) => sum + (session?.durationMinutes ?? 0),
+      0,
+    );
   const currentStreak = 3; // Mock for now
 
   return (
@@ -451,8 +458,8 @@ export default function Profile() {
             </Card>
           ) : (
             <div className="space-y-3">
-              {history.slice(0, 5).map((session: any) => (
-                <Card key={session.id} className="p-4 bg-card/40 border-border/40 flex items-center justify-between">
+                {history.slice(0, 5).map((session) => (
+                  <Card key={session.id} className="p-4 bg-card/40 border-border/40 flex items-center justify-between">
                   <div className="flex gap-4 items-center">
                     <div className="h-12 w-12 rounded-lg bg-secondary flex items-center justify-center">
                       <Award className="text-muted-foreground w-6 h-6" />

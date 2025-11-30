@@ -177,6 +177,23 @@ function weightedRandomSelection<T>(items: T[], getWeight: (item: T) => number):
   return items[items.length - 1]; // Fallback
 }
 
+function normalizeExerciseBias(
+  bias:
+    | { compoundLifts: number; cardio: number; plyometric: number; mobility: number }
+    | { compound: number; cardio: number; plyometric: number; mobility: number },
+): { compound: number; cardio: number; plyometric: number; mobility: number } {
+  if ("compound" in bias) {
+    return bias;
+  }
+
+  return {
+    compound: bias.compoundLifts,
+    cardio: bias.cardio,
+    plyometric: bias.plyometric,
+    mobility: bias.mobility,
+  };
+}
+
 export function generateEMOMWorkout(
   skillScore: number,
   fitnessLevel: string,
@@ -244,10 +261,11 @@ export function generateEMOMWorkout(
     }
   }
 
-  // Get exercise bias from goal weights (or use primary goal config)
-  const exerciseBias = goalWeights && resolvedPrimaryGoal
-    ? getCombinedExerciseBias(goalWeights)
-    : goalConfig?.exerciseBias ?? { compound: 0.5, cardio: 0.5, plyometric: 0.5, mobility: 0.2 };
+    // Get exercise bias from goal weights (or use primary goal config)
+    const rawExerciseBias = goalWeights && resolvedPrimaryGoal
+      ? getCombinedExerciseBias(goalWeights)
+      : goalConfig?.exerciseBias ?? { compound: 0.5, cardio: 0.5, plyometric: 0.5, mobility: 0.2 };
+    const exerciseBias = normalizeExerciseBias(rawExerciseBias);
 
   // Filter exercises by equipment and difficulty
   const availableExercises = EXERCISES.filter((ex) => {
@@ -351,10 +369,11 @@ export function generateTabataWorkout(
 
   const durationMinutes = numExercises * 4; // 4 minutes per exercise
 
-  // Get exercise bias from goal weights
-  const exerciseBias = goalWeights && resolvedPrimaryGoal
-    ? getCombinedExerciseBias(goalWeights)
-    : goalConfig?.exerciseBias ?? { compound: 0.5, cardio: 0.7, plyometric: 0.7, mobility: 0.1 };
+    // Get exercise bias from goal weights
+    const rawExerciseBias = goalWeights && resolvedPrimaryGoal
+      ? getCombinedExerciseBias(goalWeights)
+      : goalConfig?.exerciseBias ?? { compound: 0.5, cardio: 0.7, plyometric: 0.7, mobility: 0.1 };
+    const exerciseBias = normalizeExerciseBias(rawExerciseBias);
 
   // Filter exercises by equipment and difficulty - Tabata needs high-intensity exercises
   const availableExercises = EXERCISES.filter((ex) => {
@@ -463,10 +482,11 @@ export function generateAMRAPWorkout(
     durationMinutes = 15 + Math.floor(Math.random() * 6); // 15-20 minutes
   }
 
-  // Get exercise bias from goal weights
-  const exerciseBias = goalWeights && resolvedPrimaryGoal
-    ? getCombinedExerciseBias(goalWeights)
-    : goalConfig?.exerciseBias ?? { compound: 0.6, cardio: 0.6, plyometric: 0.5, mobility: 0.2 };
+    // Get exercise bias from goal weights
+    const rawExerciseBias = goalWeights && resolvedPrimaryGoal
+      ? getCombinedExerciseBias(goalWeights)
+      : goalConfig?.exerciseBias ?? { compound: 0.6, cardio: 0.6, plyometric: 0.5, mobility: 0.2 };
+    const exerciseBias = normalizeExerciseBias(rawExerciseBias);
 
   // Filter exercises by equipment and difficulty
   const availableExercises = EXERCISES.filter((ex) => {
@@ -576,10 +596,11 @@ export function generateCircuitWorkout(
     totalRounds = 4 + Math.floor(Math.random() * 2); // 4-5 rounds
   }
 
-  // Get exercise bias from goal weights
-  const exerciseBias = goalWeights && resolvedPrimaryGoal
-    ? getCombinedExerciseBias(goalWeights)
-    : goalConfig?.exerciseBias ?? { compound: 0.7, cardio: 0.4, plyometric: 0.4, mobility: 0.3 };
+    // Get exercise bias from goal weights
+    const rawExerciseBias = goalWeights && resolvedPrimaryGoal
+      ? getCombinedExerciseBias(goalWeights)
+      : goalConfig?.exerciseBias ?? { compound: 0.7, cardio: 0.4, plyometric: 0.4, mobility: 0.3 };
+    const exerciseBias = normalizeExerciseBias(rawExerciseBias);
 
   // Filter exercises by equipment and difficulty
   const availableExercises = EXERCISES.filter((ex) => {

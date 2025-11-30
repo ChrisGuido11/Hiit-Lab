@@ -14,6 +14,9 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
+import type { EquipmentId } from "@shared/equipment";
+
+type ProfileInsert = typeof profiles.$inferInsert;
 
 export interface IStorage {
   // User operations (required for Replit Auth)
@@ -68,14 +71,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProfile(profileData: InsertProfile): Promise<Profile> {
-    const [profile] = await db.insert(profiles).values(profileData).returning();
+    const dbProfile: ProfileInsert = {
+      ...profileData,
+      equipment: profileData.equipment as EquipmentId[],
+      primaryGoal: profileData.primaryGoal as ProfileInsert["primaryGoal"],
+      secondaryGoals: profileData.secondaryGoals as ProfileInsert["secondaryGoals"],
+      goalWeights: profileData.goalWeights as ProfileInsert["goalWeights"],
+    };
+
+    const [profile] = await db
+      .insert(profiles)
+      .values(dbProfile)
+      .returning();
     return profile;
   }
 
   async updateProfile(userId: string, updates: Partial<Omit<InsertProfile, 'userId'>>): Promise<Profile> {
+    const normalizedUpdates: Partial<ProfileInsert> = {
+      ...updates,
+      equipment: updates.equipment as EquipmentId[] | undefined,
+      primaryGoal: updates.primaryGoal as ProfileInsert["primaryGoal"],
+      secondaryGoals: updates.secondaryGoals as ProfileInsert["secondaryGoals"],
+      goalWeights: updates.goalWeights as ProfileInsert["goalWeights"],
+    };
     const [profile] = await db
       .update(profiles)
-      .set(updates)
+      .set(normalizedUpdates)
       .where(eq(profiles.userId, userId))
       .returning();
     return profile;

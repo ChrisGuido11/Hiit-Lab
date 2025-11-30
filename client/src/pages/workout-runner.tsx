@@ -258,7 +258,6 @@ export default function WorkoutRunner() {
                 setCurrentRoundIndex(0);
                 setIsActive(false);
                 setIsResting(false);
-                setCompletedRounds(0);
 
                 // Reset timer based on framework
                 if (workout.framework === "EMOM") {
