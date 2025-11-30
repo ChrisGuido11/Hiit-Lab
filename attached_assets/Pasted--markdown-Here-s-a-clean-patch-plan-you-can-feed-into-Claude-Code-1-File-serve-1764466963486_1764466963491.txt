@@ -1,0 +1,460 @@
+````markdown
+Here’s a clean patch plan you can feed into Claude Code.
+
+---
+
+## 1️⃣ File: `server/utils/emomGenerator.ts`
+
+### 1.1 Normalize `minuteIndex` for Tabata (1-based)
+
+**Find:**
+
+```ts
+  // Create rounds: each exercise gets 8 intervals (4 minutes)
+  let minuteIndex = 0;
+  for (const exercise of selectedExercises) {
+    // Each Tabata exercise has 8 rounds of 20s work / 10s rest
+    for (let round = 0; round < 8; round++) {
+      rounds.push({
+        minuteIndex: minuteIndex++,
+        exerciseName: exercise.name,
+        targetMuscleGroup: exercise.muscleGroup,
+        difficulty: exercise.difficulty,
+        reps: Math.ceil(exercise.reps[difficultyTag] * 0.4), // Fewer reps due to shorter work period
+      });
+    }
+  }
+````
+
+**Replace with:**
+
+```ts
+  // Create rounds: each exercise gets 8 intervals (4 minutes)
+  // minuteIndex is 1-based for cleaner UI display
+  let minuteIndex = 1;
+  for (const exercise of selectedExercises) {
+    // Each Tabata exercise has 8 rounds of 20s work / 10s rest
+    for (let round = 0; round < 8; round++) {
+      rounds.push({
+        minuteIndex: minuteIndex++,
+        exerciseName: exercise.name,
+        targetMuscleGroup: exercise.muscleGroup,
+        difficulty: exercise.difficulty,
+        reps: Math.ceil(exercise.reps[difficultyTag] * 0.4), // Suggested reps per work interval
+      });
+    }
+  }
+```
+
+---
+
+### 1.2 Normalize `minuteIndex` for AMRAP (1-based)
+
+**Find (inside `generateAMRAPWorkout`):**
+
+```ts
+  for (let i = 0; i < circuitExercises.length; i++) {
+    const exercise = circuitExercises[i];
+    rounds.push({
+      minuteIndex: i,
+      exerciseName: exercise.name,
+      targetMuscleGroup: exercise.muscleGroup,
+      difficulty: exercise.difficulty,
+      reps: exercise.reps[difficultyTag],
+    });
+  }
+```
+
+**Replace with:**
+
+```ts
+  for (let i = 0; i < circuitExercises.length; i++) {
+    const exercise = circuitExercises[i];
+    rounds.push({
+      // 1-based index for cleaner UI labels
+      minuteIndex: i + 1,
+      exerciseName: exercise.name,
+      targetMuscleGroup: exercise.muscleGroup,
+      difficulty: exercise.difficulty,
+      reps: exercise.reps[difficultyTag],
+    });
+  }
+```
+
+---
+
+### 1.3 Normalize `minuteIndex` for Circuit (1-based)
+
+**Find (inside `generateCircuitWorkout`):**
+
+```ts
+  let minuteIndex = 0;
+
+  for (let round = 0; round < totalRounds; round++) {
+    for (const exercise of circuitExercises) {
+      rounds.push({
+        minuteIndex: minuteIndex++,
+        exerciseName: exercise.name,
+        targetMuscleGroup: exercise.muscleGroup,
+        difficulty: exercise.difficulty,
+        reps: exercise.reps[difficultyTag],
+      });
+    }
+  }
+```
+
+**Replace with:**
+
+```ts
+  // 1-based index so UI never shows interval "0"
+  let minuteIndex = 1;
+
+  for (let round = 0; round < totalRounds; round++) {
+    for (const exercise of circuitExercises) {
+      rounds.push({
+        minuteIndex: minuteIndex++,
+        exerciseName: exercise.name,
+        targetMuscleGroup: exercise.muscleGroup,
+        difficulty: exercise.difficulty,
+        reps: exercise.reps[difficultyTag],
+      });
+    }
+  }
+```
+
+---
+
+## 2️⃣ File: `client/src/pages/workout-runner.tsx`
+
+### 2.1 Improve Tabata progress text (time-based, interval-aware)
+
+**Find:**
+
+```ts
+const getProgressText = () => {
+  if (workout.framework === "EMOM") {
+    return `Round ${currentRoundIndex + 1}/${workout.rounds.length}`;
+  } else if (workout.framework === "Tabata") {
+    const currentSet = Math.floor(currentRoundIndex / (workout.sets || 8)) + 1;
+    const totalSets = Math.ceil(workout.rounds.length / (workout.sets || 8));
+    const intervalInSet = (currentRoundIndex % (workout.sets || 8)) + 1;
+    return `Set ${currentSet}/${totalSets} • ${intervalInSet}/${workout.sets || 8}`;
+  } else if (workout.framework === "AMRAP") {
+    return `AMRAP • ${workout.durationMinutes} min`;
+  } else if (workout.framework === "Circuit") {
+    const exercisesPerRound = workout.rounds.length / (workout.totalRounds || 1);
+    const currentRound = Math.floor(currentRoundIndex / exercisesPerRound) + 1;
+    return `Round ${currentRound}/${workout.totalRounds || 1}`;
+  }
+  return "";
+};
+```
+
+**Replace with:**
+
+```ts
+const getProgressText = () => {
+  if (workout.framework === "EMOM") {
+    return `Round ${currentRoundIndex + 1}/${workout.rounds.length}`;
+  } else if (workout.framework === "Tabata") {
+    const intervalsPerExercise = workout.sets || 8;
+    const totalExercises = Math.ceil(workout.rounds.length / intervalsPerExercise);
+    const exerciseIndex = Math.floor(currentRoundIndex / intervalsPerExercise) + 1;
+    const intervalInExercise = (currentRoundIndex % intervalsPerExercise) + 1;
+    return `Exercise ${exerciseIndex}/${totalExercises} • Interval ${intervalInExercise}/${intervalsPerExercise}`;
+  } else if (workout.framework === "AMRAP") {
+    return `AMRAP • ${workout.durationMinutes} min`;
+  } else if (workout.framework === "Circuit") {
+    const exercisesPerRound = workout.rounds.length / (workout.totalRounds || 1);
+    const currentRound = Math.floor(currentRoundIndex / exercisesPerRound) + 1;
+    return `Round ${currentRound}/${workout.totalRounds || 1}`;
+  }
+  return "";
+};
+```
+
+---
+
+### 2.2 Make “Current Move” right-side metric time-framework aware
+
+**Optional helper near top of component (after `useQuery`):**
+
+```ts
+  const { data: workout } = useQuery({
+    queryKey: ["/api/workout/generate"],
+  });
+
+  const isTabata = workout?.framework === "Tabata";
+```
+
+**Find “Current Move” section:**
+
+```tsx
+          {/* Current Exercise */}
+          <div className="bg-black/40 rounded-2xl p-6 mb-6 border border-border/30">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-muted-foreground uppercase text-xs font-bold tracking-wider mb-1">Current Move</p>
+                <h2 className="text-4xl font-display font-bold text-white uppercase">{currentExercise.exerciseName}</h2>
+              </div>
+              <div className="text-right">
+                <span className="text-4xl font-display font-bold text-primary">{currentExercise.reps}</span>
+                <p className="text-muted-foreground uppercase text-xs font-bold tracking-wider">Reps</p>
+              </div>
+            </div>
+```
+
+**Replace that right column with:**
+
+```tsx
+              <div className="text-right">
+                {workout.framework === "Tabata" ? (
+                  <>
+                    <span className="text-4xl font-display font-bold text-primary">
+                      {secondsLeft}s
+                    </span>
+                    <p className="text-muted-foreground uppercase text-xs font-bold tracking-wider">
+                      {isResting ? "Rest Interval" : "Work Interval"}
+                    </p>
+                    {currentExercise.reps ? (
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Target ~{currentExercise.reps} reps
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-4xl font-display font-bold text-primary">
+                      {currentExercise.reps}
+                    </span>
+                    <p className="text-muted-foreground uppercase text-xs font-bold tracking-wider">
+                      Reps
+                    </p>
+                  </>
+                )}
+              </div>
+```
+
+Now Tabata emphasizes **time + interval type**, and reps become optional guidance.
+
+---
+
+### 2.3 Make “Next Up” preview avoid reps for Tabata
+
+**Find:**
+
+```tsx
+          {/* Next Up Preview */}
+          <div className="bg-black/40 rounded-xl p-4 flex items-center justify-between mb-6 border border-border/30">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-1 bg-primary rounded-full" />
+              <div>
+                <p className="text-xs text-muted-foreground uppercase font-bold">Next Up</p>
+                <p className="font-bold text-white">{nextExercise ? nextExercise.exerciseName : "Finish"}</p>
+              </div>
+            </div>
+            {nextExercise && <span className="font-display text-xl text-muted-foreground">{nextExercise.reps}</span>}
+          </div>
+```
+
+**Replace the last line with:**
+
+```tsx
+            {nextExercise && (
+              <span className="font-display text-xl text-muted-foreground">
+                {workout.framework === "Tabata"
+                  ? `${workout.workSeconds ?? 20}s`
+                  : `${nextExercise.reps} reps`}
+              </span>
+            )}
+```
+
+---
+
+## 3️⃣ File: `client/src/pages/workout-detail.tsx`
+
+### 3.1 Make summary line framework-aware instead of “Minute HIIT”
+
+**Find:**
+
+```tsx
+            <h1 className="text-5xl font-display font-bold text-white uppercase">{workout.focusLabel}</h1>
+            <p className="text-xl text-muted-foreground">{workout.durationMinutes} Minute HIIT</p>
+```
+
+**Replace with:**
+
+```tsx
+            <h1 className="text-5xl font-display font-bold text-white uppercase">{workout.focusLabel}</h1>
+            <p className="text-xl text-muted-foreground">
+              {workout.durationMinutes} Min {frameworkConfig?.name ?? "HIIT"}
+            </p>
+```
+
+(You already have `frameworkConfig` from `FRAMEWORK_CONFIGS[workout.framework]` above.)
+
+---
+
+### 3.2 Make exercise right-column Tabata-aware (time first, reps optional)
+
+**Find the exercise list item right column:**
+
+```tsx
+                <div className="text-right">
+                  <span className="text-2xl font-display font-bold text-white">{round.reps}</span>
+                  <p className="text-xs text-muted-foreground uppercase">Reps</p>
+                </div>
+```
+
+**Replace with:**
+
+```tsx
+                <div className="text-right">
+                  {workout.framework === "Tabata" ? (
+                    <>
+                      <span className="text-2xl font-display font-bold text-white">
+                        {workout.workSeconds ?? 20}s
+                      </span>
+                      <p className="text-xs text-muted-foreground uppercase">
+                        Interval • {workout.sets || 8} rounds
+                      </p>
+                      {round.reps ? (
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Target ~{round.reps} reps
+                        </p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-2xl font-display font-bold text-white">{round.reps}</span>
+                      <p className="text-xs text-muted-foreground uppercase">Reps</p>
+                    </>
+                  )}
+                </div>
+```
+
+---
+
+### 3.3 Make CTA test id framework-agnostic
+
+**Find:**
+
+```tsx
+          <Button
+            className="w-full h-14 text-lg font-bold uppercase tracking-wider bg-primary text-black hover:bg-primary/90"
+            onClick={() => setLocation("/workout/runner")}
+            data-testid="button-start-emom"
+          >
+```
+
+**Replace the `data-testid` only:**
+
+```tsx
+            data-testid="button-start-workout"
+```
+
+---
+
+## 4️⃣ File: `client/src/pages/workout-lab.tsx`
+
+### 4.1 Add framework-aware summary meta helper
+
+**Right after `FRAMEWORK_ICONS` declaration, add:**
+
+```ts
+function getWorkoutSummaryMeta(workout: GeneratedWorkout) {
+  switch (workout.framework) {
+    case "EMOM":
+      return {
+        formatLabel: "EMOM",
+        countLabel: "minutes", // rounds.length
+      };
+    case "Tabata":
+      return {
+        formatLabel: "Tabata",
+        countLabel: "intervals", // rounds.length
+      };
+    case "AMRAP":
+      return {
+        formatLabel: "AMRAP",
+        countLabel: "exercises in circuit",
+      };
+    case "Circuit":
+      return {
+        formatLabel: "Circuit",
+        countLabel: "intervals",
+      };
+    default:
+      return {
+        formatLabel: workout.framework,
+        countLabel: "rounds",
+      };
+  }
+}
+```
+
+---
+
+### 4.2 Use meta in toast description
+
+**Find in `generateMutation.onSuccess`:**
+
+```ts
+      toast({
+        title: `${framework} Workout Generated!`,
+        description: `${data.durationMinutes} min • ${data.rounds.length} exercises`,
+      });
+```
+
+**Replace with:**
+
+```ts
+      const meta = getWorkoutSummaryMeta(data);
+
+      toast({
+        title: `${framework} Workout Generated!`,
+        description: `${data.durationMinutes} Min • ${data.rounds.length} ${meta.countLabel}`,
+      });
+```
+
+---
+
+### 4.3 Use meta in generated workout preview card
+
+Inside the block where `generatedWorkout` is rendered (the “Generated Workout” card), find the summary line:
+
+```tsx
+                <h3 className="text-xl font-bold text-white mb-2">
+                  {generatedWorkout.focusLabel} HIIT
+                </h3>
+                <p className="text-gray-300 text-sm mb-3">
+                  {generatedWorkout.durationMinutes} Min • {generatedWorkout.rounds.length} Exercises • {generatedWorkout.difficultyTag}
+                </p>
+```
+
+**Replace with:**
+
+```tsx
+                <h3 className="text-xl font-bold text-white mb-2">
+                  {generatedWorkout.focusLabel} HIIT
+                </h3>
+                <p className="text-gray-300 text-sm mb-3">
+                  {(() => {
+                    const meta = getWorkoutSummaryMeta(generatedWorkout);
+                    return `${generatedWorkout.durationMinutes} Min • ${generatedWorkout.rounds.length} ${meta.countLabel} • ${generatedWorkout.difficultyTag}`;
+                  })()}
+                </p>
+```
+
+This keeps the UI simple but makes the label match the framework semantics (minutes vs intervals vs circuit exercises).
+
+---
+
+These patches together:
+
+* Make **Tabata clearly time-based** in runner, detail, and preview.
+* Normalize `minuteIndex` across generators (no “interval 0”).
+* Fix misleading “Exercises” labels where `rounds.length` actually means “minutes” or “intervals”.
+* Clean test id naming.
+
+Paste this into Claude Code and apply file-by-file.

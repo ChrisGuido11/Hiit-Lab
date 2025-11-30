@@ -386,7 +386,8 @@ export function generateTabataWorkout(
   }
 
   // Create rounds: each exercise gets 8 intervals (4 minutes)
-  let minuteIndex = 0;
+  // minuteIndex is 1-based for cleaner UI display
+  let minuteIndex = 1;
   for (const exercise of selectedExercises) {
     // Each Tabata exercise has 8 rounds of 20s work / 10s rest
     for (let round = 0; round < 8; round++) {
@@ -395,7 +396,7 @@ export function generateTabataWorkout(
         exerciseName: exercise.name,
         targetMuscleGroup: exercise.muscleGroup,
         difficulty: exercise.difficulty,
-        reps: Math.ceil(exercise.reps[difficultyTag] * 0.4), // Fewer reps due to shorter work period
+        reps: Math.ceil(exercise.reps[difficultyTag] * 0.4), // Suggested reps per work interval
       });
     }
   }
@@ -507,7 +508,8 @@ export function generateAMRAPWorkout(
   for (let i = 0; i < circuitExercises.length; i++) {
     const exercise = circuitExercises[i];
     rounds.push({
-      minuteIndex: i,
+      // 1-based index for cleaner UI labels
+      minuteIndex: i + 1,
       exerciseName: exercise.name,
       targetMuscleGroup: exercise.muscleGroup,
       difficulty: exercise.difficulty,
