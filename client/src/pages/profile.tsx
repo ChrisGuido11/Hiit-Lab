@@ -80,7 +80,7 @@ export default function Profile() {
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
-  const { data: history = [] } = useQuery<Array<WorkoutSession & { rounds: WorkoutRound[] }>>({
+  const { data: history } = useQuery<Array<WorkoutSession & { rounds: WorkoutRound[] }> | null>({
     queryKey: ["/api/workout/history"],
     enabled: !!user,
     queryFn: getQueryFn({ on401: "returnNull" }),
@@ -219,8 +219,9 @@ export default function Profile() {
     );
   }
 
-    const totalWorkouts = history.length;
-    const totalMinutes = history.reduce(
+    const safeHistory = history ?? [];
+    const totalWorkouts = safeHistory.length;
+    const totalMinutes = safeHistory.reduce(
       (sum, session) => sum + (session?.durationMinutes ?? 0),
       0,
     );
@@ -452,13 +453,13 @@ export default function Profile() {
         {/* Workout History */}
         <div>
           <h2 className="text-lg font-bold text-white mb-4">Recent Workouts</h2>
-          {history.length === 0 ? (
+          {safeHistory.length === 0 ? (
             <Card className="p-6 bg-card/40 border-border/40 text-center">
               <p className="text-muted-foreground">No workouts yet. Start your first session!</p>
             </Card>
           ) : (
             <div className="space-y-3">
-                {history.slice(0, 5).map((session) => (
+                {safeHistory.slice(0, 5).map((session) => (
                   <Card key={session.id} className="p-4 bg-card/40 border-border/40 flex items-center justify-between">
                   <div className="flex gap-4 items-center">
                     <div className="h-12 w-12 rounded-lg bg-secondary flex items-center justify-center">
