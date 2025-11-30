@@ -11,6 +11,14 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { GeneratedWorkout } from "@/../../shared/schema";
 
+type RunnerSettings = {
+  soundCues: boolean;
+  voiceCues: boolean;
+  preStartCountdown: boolean;
+  restAutoSkip: boolean;
+  intervalVibration: boolean;
+};
+
 export default function WorkoutRunner() {
   const [, setLocation] = useLocation();
   const [isActive, setIsActive] = useState(false);
@@ -19,15 +27,21 @@ export default function WorkoutRunner() {
   const [isResting, setIsResting] = useState(false); // For Tabata work/rest phases
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [wasActiveBeforeSettings, setWasActiveBeforeSettings] = useState(false);
-  const [enableVibration, setEnableVibration] = useState(true);
-  const [keepScreenAwake, setKeepScreenAwake] = useState(true);
-  const [enableSound, setEnableSound] = useState(true);
-  const [enableVoiceCues, setEnableVoiceCues] = useState(true);
-  const [countdownBeeps, setCountdownBeeps] = useState(true);
+  const [isPrestartCountdown, setIsPrestartCountdown] = useState(false);
+  const [prestartSecondsLeft, setPrestartSecondsLeft] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const prestartTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const previousSecondsRef = useRef<number | null>(null);
   const previousActiveRef = useRef(false);
+  const lastBeepSecondRef = useRef<number | null>(null);
+  const SETTINGS_KEY = "workout-runner-settings";
+  const [settings, setSettings] = useState<RunnerSettings>({
+    soundCues: true,
+    voiceCues: true,
+    preStartCountdown: true,
+    restAutoSkip: false,
+    intervalVibration: true,
+  });
 
   const { data: workout, isLoading, isError } = useQuery<GeneratedWorkout | null>({
     queryKey: ["/api/workout/generate"],
@@ -53,7 +67,7 @@ export default function WorkoutRunner() {
   };
 
   const playBeep = (frequency = 880, duration = 180, volume = 0.2) => {
-    if (!enableSound) return;
+    if (!settings.soundCues) return;
 
     const ctx = ensureAudioContext();
     if (!ctx) return;
@@ -78,7 +92,7 @@ export default function WorkoutRunner() {
   };
 
   const speakCue = (message: string) => {
-    if (!enableVoiceCues || typeof window === "undefined") return;
+    if (!settings.voiceCues || typeof window === "undefined") return;
 
     const synth = window.speechSynthesis;
     if (!synth) return;
@@ -89,6 +103,24 @@ export default function WorkoutRunner() {
     synth.cancel();
     synth.speak(utterance);
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(SETTINGS_KEY);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        setSettings(prev => ({ ...prev, ...parsed }));
+      } catch (error) {
+        console.error("Failed to parse workout settings", error);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  }, [settings]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -115,15 +147,68 @@ export default function WorkoutRunner() {
   useEffect(() => {
     if (!workout) return;
 
-    if (isActive && secondsLeft > 0) {
+    if (isPrestartCountdown) {
+      if (prestartSecondsLeft > 0) {
+        prestartTimerRef.current = setTimeout(() => setPrestartSecondsLeft(s => s - 1), 1000);
+      } else {
+        setIsPrestartCountdown(false);
+        setIsActive(true);
+      }
+    }
+    return () => {
+      if (prestartTimerRef.current) clearTimeout(prestartTimerRef.current);
+    };
+  }, [isPrestartCountdown, prestartSecondsLeft, workout]);
+
+  useEffect(() => {
+    if (!workout) return;
+
+    if (isActive && secondsLeft > 0 && !isPrestartCountdown) {
       timerRef.current = setTimeout(() => setSecondsLeft(s => s - 1), 1000);
-    } else if (secondsLeft === 0) {
+    } else if (!isPrestartCountdown && secondsLeft === 0) {
       handleIntervalComplete();
     }
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [isActive, secondsLeft, currentRoundIndex, workout, isResting]);
+  }, [isActive, secondsLeft, currentRoundIndex, workout, isResting, isPrestartCountdown]);
+
+  useEffect(() => {
+    if (!settings.soundCues || !isActive || isPrestartCountdown) return;
+    if (secondsLeft > 0 && secondsLeft <= 3) {
+      if (lastBeepSecondRef.current !== secondsLeft) {
+        playBeep();
+        lastBeepSecondRef.current = secondsLeft;
+      }
+    }
+  }, [secondsLeft, isActive, settings.soundCues, isPrestartCountdown]);
+
+  useEffect(() => {
+    if (isPrestartCountdown && prestartSecondsLeft > 0 && settings.soundCues) {
+      playBeep();
+    }
+  }, [isPrestartCountdown, prestartSecondsLeft, settings.soundCues]);
+
+  useEffect(() => {
+    lastBeepSecondRef.current = null;
+  }, [currentRoundIndex, isResting, settings.restAutoSkip]);
+
+  const vibrate = (duration = 150) => {
+    if (!settings.intervalVibration || typeof navigator === "undefined") return;
+    if (navigator.vibrate) {
+      navigator.vibrate(duration);
+    }
+  };
+
+  const triggerIntervalCues = (message?: string) => {
+    if (settings.soundCues) {
+      playBeep();
+    }
+    if (message) {
+      speakCue(message);
+    }
+    vibrate();
+  };
 
   const handleIntervalComplete = () => {
     if (!workout) return;
@@ -133,8 +218,7 @@ export default function WorkoutRunner() {
       if (currentRoundIndex < workout.rounds.length - 1) {
         setCurrentRoundIndex(i => i + 1);
         setSecondsLeft(60);
-        playChime();
-        speakCue(`Minute ${currentRoundIndex + 2}`);
+        triggerIntervalCues("Next minute");
       } else {
         setLocation("/workout/complete");
       }
@@ -146,17 +230,26 @@ export default function WorkoutRunner() {
           setCurrentRoundIndex(i => i + 1);
           setSecondsLeft(workout.workSeconds || 20);
           setIsResting(false);
-          playChime();
-          speakCue(workout.rounds[currentRoundIndex + 1]?.exerciseName ?? "Work");
+          triggerIntervalCues("Work interval");
         } else {
           setLocation("/workout/complete");
         }
       } else {
         // Work complete, start rest
-        setSecondsLeft(workout.restSeconds || 10);
-        setIsResting(true);
-        playBeep(480, 220, 0.16);
-        speakCue("Rest");
+        if (settings.restAutoSkip) {
+          if (currentRoundIndex < workout.rounds.length - 1) {
+            setCurrentRoundIndex(i => i + 1);
+            setSecondsLeft(workout.workSeconds || 20);
+            setIsResting(false);
+            triggerIntervalCues("Skipping rest");
+          } else {
+            setLocation("/workout/complete");
+          }
+        } else {
+          setSecondsLeft(workout.restSeconds || 10);
+          setIsResting(true);
+          triggerIntervalCues("Rest");
+        }
       }
     } else if (workout.framework === "AMRAP") {
       // AMRAP: Time expired, workout complete
@@ -170,11 +263,19 @@ export default function WorkoutRunner() {
         const exercisesPerRound = workout.rounds.length / (workout.totalRounds || 1);
         if ((currentRoundIndex + 1) % exercisesPerRound === 0 && currentRoundIndex < workout.rounds.length - 1) {
           // Rest between rounds
-          setSecondsLeft(workout.restSeconds || 60);
-          setIsResting(true);
+          if (settings.restAutoSkip) {
+            setSecondsLeft(45);
+            setIsResting(false);
+            triggerIntervalCues("Next round");
+          } else {
+            setSecondsLeft(workout.restSeconds || 60);
+            setIsResting(true);
+            triggerIntervalCues("Round rest");
+          }
         } else {
           setSecondsLeft(45);
           setIsResting(false);
+          triggerIntervalCues("Next exercise");
         }
       } else {
         setLocation("/workout/complete");
@@ -197,13 +298,32 @@ export default function WorkoutRunner() {
   const currentExercise = workout.rounds[currentRoundIndex];
   const nextExercise = workout.rounds[currentRoundIndex + 1] || null;
 
-  const toggleTimer = () => setIsActive(!isActive);
+  const toggleTimer = () => {
+    if (isActive || isPrestartCountdown) {
+      setIsActive(false);
+      setIsPrestartCountdown(false);
+      setPrestartSecondsLeft(0);
+      return;
+    }
+
+    if (settings.preStartCountdown && secondsLeft > 0) {
+      setPrestartSecondsLeft(3);
+      setIsPrestartCountdown(true);
+    } else {
+      setIsActive(true);
+    }
+  };
 
   const handleSettingsOpenChange = (open: boolean) => {
     if (open) {
       setWasActiveBeforeSettings(isActive);
       setIsActive(false);
-    } else if (wasActiveBeforeSettings) {
+    }
+    if (!open) {
+      setPrestartSecondsLeft(0);
+      setIsPrestartCountdown(false);
+    }
+    if (!open && wasActiveBeforeSettings) {
       setIsActive(true);
     }
     setIsSettingsOpen(open);
@@ -220,7 +340,7 @@ export default function WorkoutRunner() {
   };
 
   useEffect(() => {
-    if (!workout) return;
+    if (!workout || isPrestartCountdown) return;
 
     if (isActive && !previousActiveRef.current) {
       playChime();
@@ -231,31 +351,18 @@ export default function WorkoutRunner() {
     }
 
     previousActiveRef.current = isActive;
-  }, [isActive, workout, currentRoundIndex]);
+  }, [isActive, workout, currentRoundIndex, isPrestartCountdown]);
 
   useEffect(() => {
-    if (!workout || !isActive) {
-      previousSecondsRef.current = secondsLeft;
+    if (!workout || !isActive || isPrestartCountdown) {
       return;
-    }
-
-    const prevSeconds = previousSecondsRef.current;
-
-    if (countdownBeeps && secondsLeft > 0 && secondsLeft <= 3) {
-      playBeep(960 - secondsLeft * 60, 160, 0.2);
     }
 
     if (workout.framework === "AMRAP" && secondsLeft === 60) {
       playChime();
       speakCue("Final minute. Empty the tank.");
     }
-
-    if (secondsLeft === 0) {
-      playBeep(360, 260, 0.2);
-    }
-
-    previousSecondsRef.current = secondsLeft;
-  }, [secondsLeft, isActive, workout, countdownBeeps]);
+  }, [secondsLeft, isActive, workout, isPrestartCountdown]);
 
   const getProgressText = () => {
     if (workout.framework === "EMOM") {
@@ -277,6 +384,9 @@ export default function WorkoutRunner() {
   };
 
   const getTimerLabel = () => {
+    if (isPrestartCountdown) {
+      return "Get Ready";
+    }
     if (workout.framework === "Tabata") {
       return isResting ? "Rest" : "Go!";
     } else if (workout.framework === "AMRAP") {
@@ -321,13 +431,17 @@ export default function WorkoutRunner() {
 
           <div className="relative z-10 text-center">
             <motion.div
-              key={secondsLeft}
+              key={`${secondsLeft}-${prestartSecondsLeft}-${isPrestartCountdown}`}
               initial={{ y: 10, opacity: 0.8 }}
               animate={{ y: 0, opacity: 1 }}
               className="font-display text-[12rem] leading-none font-bold text-white tracking-tighter tabular-nums"
               style={{ textShadow: "0 0 40px rgba(255,255,255,0.1)" }}
             >
-              {workout.framework === "AMRAP" ? formatTime(secondsLeft) : `:${formatTime(secondsLeft)}`}
+              {isPrestartCountdown
+                ? `:${formatTime(prestartSecondsLeft)}`
+                : workout.framework === "AMRAP"
+                ? formatTime(secondsLeft)
+                : `:${formatTime(secondsLeft)}`}
             </motion.div>
             <div className={cn(
               "text-xl uppercase tracking-[0.2em] font-bold mt-4 neon-text",
@@ -395,13 +509,15 @@ export default function WorkoutRunner() {
 
           {/* Controls */}
           <div className="grid grid-cols-3 gap-4">
-             <Button
+            <Button
               variant="outline"
               className="h-14 border-border/50 hover:bg-secondary/50 hover:text-white"
               onClick={() => {
                 setCurrentRoundIndex(0);
                 setIsActive(false);
                 setIsResting(false);
+                setIsPrestartCountdown(false);
+                setPrestartSecondsLeft(0);
 
                 // Reset timer based on framework
                 if (workout.framework === "EMOM") {
@@ -440,6 +556,8 @@ export default function WorkoutRunner() {
                 } else if (currentRoundIndex < workout.rounds.length - 1) {
                   setCurrentRoundIndex(i => i + 1);
                   setIsResting(false);
+                  setIsPrestartCountdown(false);
+                  setPrestartSecondsLeft(0);
 
                   // Reset timer based on framework
                   if (workout.framework === "EMOM") {
@@ -474,61 +592,61 @@ export default function WorkoutRunner() {
             <div className="space-y-4">
               <div className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/10 p-4">
                 <div>
-                  <Label htmlFor="setting-vibration" className="text-base">Vibration</Label>
-                  <p className="text-sm text-muted-foreground">Feel haptics when intervals change.</p>
+                  <Label htmlFor="setting-sound-cues" className="text-base">Sound cues</Label>
+                  <p className="text-sm text-muted-foreground">Play countdown beeps before intervals change.</p>
+                </div>
+                <Switch
+                  id="setting-sound-cues"
+                  checked={settings.soundCues}
+                  onCheckedChange={checked => setSettings(prev => ({ ...prev, soundCues: checked }))}
+                />
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/10 p-4">
+                <div>
+                  <Label htmlFor="setting-voice-cues" className="text-base">Voice cues</Label>
+                  <p className="text-sm text-muted-foreground">Announce phase changes like rest or next round.</p>
+                </div>
+                <Switch
+                  id="setting-voice-cues"
+                  checked={settings.voiceCues}
+                  onCheckedChange={checked => setSettings(prev => ({ ...prev, voiceCues: checked }))}
+                />
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/10 p-4">
+                <div>
+                  <Label htmlFor="setting-prestart" className="text-base">Pre-start countdown</Label>
+                  <p className="text-sm text-muted-foreground">Add a 3-second buffer before the timer begins.</p>
+                </div>
+                <Switch
+                  id="setting-prestart"
+                  checked={settings.preStartCountdown}
+                  onCheckedChange={checked => setSettings(prev => ({ ...prev, preStartCountdown: checked }))}
+                />
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/10 p-4">
+                <div>
+                  <Label htmlFor="setting-auto-skip" className="text-base">Auto-skip rest</Label>
+                  <p className="text-sm text-muted-foreground">Jump straight to the next interval when rest starts.</p>
+                </div>
+                <Switch
+                  id="setting-auto-skip"
+                  checked={settings.restAutoSkip}
+                  onCheckedChange={checked => setSettings(prev => ({ ...prev, restAutoSkip: checked }))}
+                />
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/10 p-4">
+                <div>
+                  <Label htmlFor="setting-vibration" className="text-base">Interval vibration</Label>
+                  <p className="text-sm text-muted-foreground">Feel haptics when phases change.</p>
                 </div>
                 <Switch
                   id="setting-vibration"
-                  checked={enableVibration}
-                  onCheckedChange={setEnableVibration}
-                />
-              </div>
-
-              <div className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/10 p-4">
-                <div>
-                  <Label htmlFor="setting-keep-awake" className="text-base">Keep screen awake</Label>
-                  <p className="text-sm text-muted-foreground">Prevent your device from sleeping mid-workout.</p>
-                </div>
-                <Switch
-                  id="setting-keep-awake"
-                  checked={keepScreenAwake}
-                  onCheckedChange={setKeepScreenAwake}
-                />
-              </div>
-
-              <div className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/10 p-4">
-                <div>
-                  <Label htmlFor="setting-sound" className="text-base">Sound effects</Label>
-                  <p className="text-sm text-muted-foreground">Beeps for start, stop, intervals, and frameworks.</p>
-                </div>
-                <Switch
-                  id="setting-sound"
-                  checked={enableSound}
-                  onCheckedChange={setEnableSound}
-                />
-              </div>
-
-              <div className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/10 p-4">
-                <div>
-                  <Label htmlFor="setting-voice" className="text-base">Voice cues</Label>
-                  <p className="text-sm text-muted-foreground">Use your device voice to announce moves and rest.</p>
-                </div>
-                <Switch
-                  id="setting-voice"
-                  checked={enableVoiceCues}
-                  onCheckedChange={setEnableVoiceCues}
-                />
-              </div>
-
-              <div className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/10 p-4">
-                <div>
-                  <Label htmlFor="setting-countdown" className="text-base">Countdown beeps</Label>
-                  <p className="text-sm text-muted-foreground">Play audio cues before each interval ends.</p>
-                </div>
-                <Switch
-                  id="setting-countdown"
-                  checked={countdownBeeps}
-                  onCheckedChange={setCountdownBeeps}
+                  checked={settings.intervalVibration}
+                  onCheckedChange={checked => setSettings(prev => ({ ...prev, intervalVibration: checked }))}
                 />
               </div>
             </div>
