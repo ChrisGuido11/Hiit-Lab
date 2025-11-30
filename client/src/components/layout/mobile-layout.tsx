@@ -25,7 +25,7 @@ export default function MobileLayout({ children, hideNav = false }: MobileLayout
       />
       
       {/* Mobile Container */}
-      <div className="w-full max-w-md h-[100dvh] bg-black flex flex-col relative z-10 overflow-hidden">
+      <div className="w-full max-w-md h-[100dvh] bg-background flex flex-col relative z-10 shadow-2xl overflow-hidden border-x border-border/20">
         <main className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide">
           <AnimatePresence mode="wait">
             <motion.div
