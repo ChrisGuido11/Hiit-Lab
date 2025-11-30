@@ -5,6 +5,9 @@ import { motion } from "framer-motion";
 import { Play, Pause, SkipForward, X, RotateCcw, Settings } from "lucide-react";
 import MobileLayout from "@/components/layout/mobile-layout";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { GeneratedWorkout } from "@/../../shared/schema";
 
@@ -14,6 +17,11 @@ export default function WorkoutRunner() {
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [isResting, setIsResting] = useState(false); // For Tabata work/rest phases
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [wasActiveBeforeSettings, setWasActiveBeforeSettings] = useState(false);
+  const [enableVibration, setEnableVibration] = useState(true);
+  const [keepScreenAwake, setKeepScreenAwake] = useState(true);
+  const [countdownBeeps, setCountdownBeeps] = useState(true);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const { data: workout, isLoading, isError } = useQuery<GeneratedWorkout | null>({
@@ -123,6 +131,16 @@ export default function WorkoutRunner() {
 
   const toggleTimer = () => setIsActive(!isActive);
 
+  const handleSettingsOpenChange = (open: boolean) => {
+    if (open) {
+      setWasActiveBeforeSettings(isActive);
+      setIsActive(false);
+    } else if (wasActiveBeforeSettings) {
+      setIsActive(true);
+    }
+    setIsSettingsOpen(open);
+  };
+
   const formatTime = (s: number) => {
     if (workout.framework === "AMRAP") {
       // Show minutes:seconds for AMRAP countdown
@@ -174,7 +192,12 @@ export default function WorkoutRunner() {
           <div className="text-sm font-bold uppercase tracking-widest text-muted-foreground">
             {getProgressText()}
           </div>
-          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-white">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:text-white"
+            onClick={() => handleSettingsOpenChange(true)}
+          >
             <Settings size={20} />
           </Button>
         </div>
@@ -183,11 +206,11 @@ export default function WorkoutRunner() {
         <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden">
           {/* Background Pulse */}
           {isActive && (
-             <motion.div 
-               animate={{ scale: [1, 1.1, 1], opacity: [0.1, 0.2, 0.1] }}
-               transition={{ repeat: Infinity, duration: 1 }}
-               className="absolute w-[500px] h-[500px] rounded-full bg-primary/10 blur-3xl"
-             />
+            <motion.div
+              animate={{ scale: [1, 1.1, 1], opacity: [0.1, 0.2, 0.1] }}
+              transition={{ repeat: Infinity, duration: 1 }}
+              className="absolute w-[500px] h-[500px] rounded-full bg-primary/10 blur-3xl"
+            />
           )}
 
           <div className="relative z-10 text-center">
@@ -330,6 +353,57 @@ export default function WorkoutRunner() {
             </Button>
           </div>
         </div>
+        <Sheet open={isSettingsOpen} onOpenChange={handleSettingsOpenChange}>
+          <SheetContent
+            side="bottom"
+            className="bg-card border-border/50 sm:max-w-md sm:rounded-t-3xl"
+          >
+            <SheetHeader className="mb-4">
+              <SheetTitle>Workout Settings</SheetTitle>
+              <SheetDescription>
+                Adjust how the timer, sounds, and display behave during your session.
+              </SheetDescription>
+            </SheetHeader>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/10 p-4">
+                <div>
+                  <Label htmlFor="setting-vibration" className="text-base">Vibration</Label>
+                  <p className="text-sm text-muted-foreground">Feel haptics when intervals change.</p>
+                </div>
+                <Switch
+                  id="setting-vibration"
+                  checked={enableVibration}
+                  onCheckedChange={setEnableVibration}
+                />
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/10 p-4">
+                <div>
+                  <Label htmlFor="setting-keep-awake" className="text-base">Keep screen awake</Label>
+                  <p className="text-sm text-muted-foreground">Prevent your device from sleeping mid-workout.</p>
+                </div>
+                <Switch
+                  id="setting-keep-awake"
+                  checked={keepScreenAwake}
+                  onCheckedChange={setKeepScreenAwake}
+                />
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/10 p-4">
+                <div>
+                  <Label htmlFor="setting-countdown" className="text-base">Countdown beeps</Label>
+                  <p className="text-sm text-muted-foreground">Play audio cues before each interval ends.</p>
+                </div>
+                <Switch
+                  id="setting-countdown"
+                  checked={countdownBeeps}
+                  onCheckedChange={setCountdownBeeps}
+                />
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </MobileLayout>
   );
