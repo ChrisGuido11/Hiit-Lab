@@ -21,12 +21,74 @@ export default function WorkoutRunner() {
   const [wasActiveBeforeSettings, setWasActiveBeforeSettings] = useState(false);
   const [enableVibration, setEnableVibration] = useState(true);
   const [keepScreenAwake, setKeepScreenAwake] = useState(true);
+  const [enableSound, setEnableSound] = useState(true);
+  const [enableVoiceCues, setEnableVoiceCues] = useState(true);
   const [countdownBeeps, setCountdownBeeps] = useState(true);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const previousSecondsRef = useRef<number | null>(null);
+  const previousActiveRef = useRef(false);
 
   const { data: workout, isLoading, isError } = useQuery<GeneratedWorkout | null>({
     queryKey: ["/api/workout/generate"],
   });
+
+  const ensureAudioContext = () => {
+    if (typeof window === "undefined") return null;
+
+    const AudioContextConstructor =
+      window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!AudioContextConstructor) return null;
+
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContextConstructor();
+    }
+
+    if (audioContextRef.current.state === "suspended") {
+      void audioContextRef.current.resume();
+    }
+
+    return audioContextRef.current;
+  };
+
+  const playBeep = (frequency = 880, duration = 180, volume = 0.2) => {
+    if (!enableSound) return;
+
+    const ctx = ensureAudioContext();
+    if (!ctx) return;
+
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    oscillator.type = "sine";
+    oscillator.frequency.value = frequency;
+    gain.gain.value = volume;
+
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + duration / 1000);
+  };
+
+  const playChime = () => {
+    playBeep(660, 160, 0.18);
+    setTimeout(() => playBeep(880, 200, 0.18), 120);
+  };
+
+  const speakCue = (message: string) => {
+    if (!enableVoiceCues || typeof window === "undefined") return;
+
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+
+    const utterance = new SpeechSynthesisUtterance(message);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    synth.cancel();
+    synth.speak(utterance);
+  };
 
   useEffect(() => {
     if (isLoading) return;
@@ -71,6 +133,8 @@ export default function WorkoutRunner() {
       if (currentRoundIndex < workout.rounds.length - 1) {
         setCurrentRoundIndex(i => i + 1);
         setSecondsLeft(60);
+        playChime();
+        speakCue(`Minute ${currentRoundIndex + 2}`);
       } else {
         setLocation("/workout/complete");
       }
@@ -82,6 +146,8 @@ export default function WorkoutRunner() {
           setCurrentRoundIndex(i => i + 1);
           setSecondsLeft(workout.workSeconds || 20);
           setIsResting(false);
+          playChime();
+          speakCue(workout.rounds[currentRoundIndex + 1]?.exerciseName ?? "Work");
         } else {
           setLocation("/workout/complete");
         }
@@ -89,6 +155,8 @@ export default function WorkoutRunner() {
         // Work complete, start rest
         setSecondsLeft(workout.restSeconds || 10);
         setIsResting(true);
+        playBeep(480, 220, 0.16);
+        speakCue("Rest");
       }
     } else if (workout.framework === "AMRAP") {
       // AMRAP: Time expired, workout complete
@@ -150,6 +218,44 @@ export default function WorkoutRunner() {
     }
     return s < 10 ? `0${s}` : s;
   };
+
+  useEffect(() => {
+    if (!workout) return;
+
+    if (isActive && !previousActiveRef.current) {
+      playChime();
+      speakCue(`Starting ${workout.rounds[currentRoundIndex]?.exerciseName ?? "work"}`);
+    } else if (!isActive && previousActiveRef.current) {
+      playBeep(420, 150, 0.18);
+      speakCue("Paused");
+    }
+
+    previousActiveRef.current = isActive;
+  }, [isActive, workout, currentRoundIndex]);
+
+  useEffect(() => {
+    if (!workout || !isActive) {
+      previousSecondsRef.current = secondsLeft;
+      return;
+    }
+
+    const prevSeconds = previousSecondsRef.current;
+
+    if (countdownBeeps && secondsLeft > 0 && secondsLeft <= 3) {
+      playBeep(960 - secondsLeft * 60, 160, 0.2);
+    }
+
+    if (workout.framework === "AMRAP" && secondsLeft === 60) {
+      playChime();
+      speakCue("Final minute. Empty the tank.");
+    }
+
+    if (secondsLeft === 0) {
+      playBeep(360, 260, 0.2);
+    }
+
+    previousSecondsRef.current = secondsLeft;
+  }, [secondsLeft, isActive, workout, countdownBeeps]);
 
   const getProgressText = () => {
     if (workout.framework === "EMOM") {
@@ -387,6 +493,30 @@ export default function WorkoutRunner() {
                   id="setting-keep-awake"
                   checked={keepScreenAwake}
                   onCheckedChange={setKeepScreenAwake}
+                />
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/10 p-4">
+                <div>
+                  <Label htmlFor="setting-sound" className="text-base">Sound effects</Label>
+                  <p className="text-sm text-muted-foreground">Beeps for start, stop, intervals, and frameworks.</p>
+                </div>
+                <Switch
+                  id="setting-sound"
+                  checked={enableSound}
+                  onCheckedChange={setEnableSound}
+                />
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/10 p-4">
+                <div>
+                  <Label htmlFor="setting-voice" className="text-base">Voice cues</Label>
+                  <p className="text-sm text-muted-foreground">Use your device voice to announce moves and rest.</p>
+                </div>
+                <Switch
+                  id="setting-voice"
+                  checked={enableVoiceCues}
+                  onCheckedChange={setEnableVoiceCues}
                 />
               </div>
 
