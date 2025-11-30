@@ -130,7 +130,7 @@ export default function Home() {
                   {workout.durationMinutes} Min • {workout.rounds.length} Exercises • {workout.difficultyTag}
                 </p>
                 
-                <Link href="/workout-detail">
+                <Link href="/workout">
                   <Button className="w-full bg-primary text-black hover:bg-primary/90 font-bold uppercase tracking-wider" data-testid="button-start-workout">
                     <Play className="w-4 h-4 mr-2 fill-current" /> Start Workout
                   </Button>
