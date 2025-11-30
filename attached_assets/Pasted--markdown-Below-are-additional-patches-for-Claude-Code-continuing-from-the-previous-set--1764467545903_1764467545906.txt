@@ -1,0 +1,142 @@
+````markdown
+Below are additional patches for Claude Code, continuing from the previous set.
+
+---
+
+## 1️⃣ File: `client/src/pages/workout-lab.tsx`
+
+### 1.1 Fix navigation for “Start Workout” (Lab → Detail)
+
+**Goal:** When the user taps “Start Workout” in the Lab, send them into the new flow (`/workout/detail`), not the old `/workout` route.
+
+**Find** the `handleStartWorkout` function:
+
+```ts
+  const handleStartWorkout = () => {
+    if (generatedWorkout) {
+      setLocation("/workout");
+    }
+  };
+````
+
+**Replace** with:
+
+```ts
+  const handleStartWorkout = () => {
+    if (generatedWorkout) {
+      // Go to the detail screen first, then into the runner from there
+      setLocation("/workout/detail");
+    }
+  };
+```
+
+If there’s a different path in your file (but still using `/workout`), adjust it to `/workout/detail` in the same way.
+
+---
+
+### 1.2 Make the generated workout exercise preview Tabata-aware
+
+**Goal:** In the Lab preview card, stop treating Tabata as purely reps-based. For Tabata, emphasize time + intervals and make reps optional/suggested.
+
+**Find** the section where `generatedWorkout.rounds` are rendered inside the “Generated Workout” card, something *similar* to:
+
+```tsx
+              <div className="space-y-2">
+                {generatedWorkout.rounds.map((round, index) => (
+                  <div
+                    key={`${round.exerciseName}-${index}`}
+                    className="flex items-center justify-between bg-black/40 rounded-xl px-4 py-3 border border-border/30"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center">
+                        <span className="text-xs font-bold text-primary">
+                          {round.minuteIndex}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-white">{round.exerciseName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {round.targetMuscleGroup} • {generatedWorkout.difficultyTag}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-lg font-display font-bold text-white">
+                        {round.reps}
+                      </span>
+                      <p className="text-[11px] text-muted-foreground uppercase">
+                        Reps
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+```
+
+(Your exact classes may differ slightly; focus on the `round.reps` + “Reps” block.)
+
+**Replace the right-column block** (`<div className="text-right">...</div>`) with a framework-aware version:
+
+```tsx
+                    <div className="text-right">
+                      {generatedWorkout.framework === "Tabata" ? (
+                        <>
+                          <span className="text-lg font-display font-bold text-white">
+                            {generatedWorkout.workSeconds ?? 20}s
+                          </span>
+                          <p className="text-[11px] text-muted-foreground uppercase">
+                            Interval • {generatedWorkout.sets || 8} rounds
+                          </p>
+                          {round.reps ? (
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                              Target ~{round.reps} reps
+                            </p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-lg font-display font-bold text-white">
+                            {round.reps}
+                          </span>
+                          <p className="text-[11px] text-muted-foreground uppercase">
+                            Reps
+                          </p>
+                        </>
+                      )}
+                    </div>
+```
+
+This mirrors the behavior we added on the detail screen, so Tabata looks time-based everywhere.
+
+---
+
+## 2️⃣ (Optional cleanup) `client/src/App.tsx`
+
+**Goal:** Ensure there’s no broken `/workout` route referenced anywhere.
+
+If you still have a route like this in `App.tsx`:
+
+```tsx
+<Route path="/workout" element={<Workout />} />
+```
+
+…and you’re no longer using `Workout` (legacy screen), either:
+
+* Delete this route, **or**
+* Explicitly route to the new flow if you want `/workout` as an alias:
+
+```tsx
+<Route path="/workout" element={<Navigate to="/workout/detail" replace />} />
+```
+
+Only apply this if you actually have `/workout` still defined. If not, you can skip this section.
+
+---
+
+These patches complete the remaining fixes:
+
+* Lab → Detail navigation is aligned with the new flow.
+* Tabata no longer looks reps-first in the Lab preview list.
+
+```
+```

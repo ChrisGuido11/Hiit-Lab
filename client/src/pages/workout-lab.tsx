@@ -107,7 +107,8 @@ export default function WorkoutLab() {
 
   const handleStartWorkout = () => {
     if (generatedWorkout) {
-      setLocation("/workout");
+      // Go to the detail screen first, then into the runner from there
+      setLocation("/workout/detail");
     }
   };
 
@@ -258,7 +259,18 @@ export default function WorkoutLab() {
                   {generatedWorkout.rounds.slice(0, 3).map((round, idx) => (
                     <div key={idx} className="flex items-center justify-between text-sm">
                       <span className="text-white">{round.exerciseName}</span>
-                      <span className="text-muted-foreground">{round.reps} reps</span>
+                      {generatedWorkout.framework === "Tabata" ? (
+                        <div className="text-right">
+                          <span className="text-muted-foreground">{generatedWorkout.workSeconds ?? 20}s</span>
+                          {round.reps && (
+                            <p className="text-[10px] text-muted-foreground">
+                              ~{round.reps} reps
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">{round.reps} reps</span>
+                      )}
                     </div>
                   ))}
                   {generatedWorkout.rounds.length > 3 && (
