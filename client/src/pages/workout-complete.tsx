@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { useHistoryState, useLocation } from "wouter";
+import { useLocation } from "wouter";
+import { useLocationProperty } from "wouter/use-location";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Brain, CheckCircle2, Share2, Star } from "lucide-react";
 import { motion } from "framer-motion";
@@ -13,7 +14,9 @@ import type { GeneratedWorkout } from "@/../../shared/schema";
 
 export default function WorkoutComplete() {
   const [, setLocation] = useLocation();
-  const historyState = useHistoryState<GeneratedWorkout | null>();
+  const workoutFromState = useLocationProperty<GeneratedWorkout | null>(
+    (location) => (location.state as GeneratedWorkout | null) ?? null,
+  );
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedRPE, setSelectedRPE] = useState<number | null>(null);
@@ -22,10 +25,10 @@ export default function WorkoutComplete() {
 
   const { data: fallbackWorkout, isLoading: isFallbackLoading } = useQuery<GeneratedWorkout | null>({
     queryKey: ["/api/workout/generate"],
-    enabled: !historyState,
+    enabled: !workoutFromState,
   });
 
-  const workout = historyState ?? fallbackWorkout ?? null;
+  const workout = workoutFromState ?? fallbackWorkout ?? null;
 
   const saveWorkoutMutation = useMutation({
     mutationFn: async ({ rpe, notes: sessionNotes }: { rpe: number; notes?: string }) => {
