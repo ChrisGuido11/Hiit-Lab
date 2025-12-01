@@ -118,7 +118,7 @@ export default function WorkoutComplete() {
 
   return (
     <MobileLayout hideNav>
-      <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-8 bg-black">
+      <div className="min-h-full flex flex-col items-center p-6 pt-8 pb-20 text-center space-y-8 bg-black">
         <motion.div 
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
