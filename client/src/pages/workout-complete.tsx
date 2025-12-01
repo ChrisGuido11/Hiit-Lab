@@ -164,6 +164,47 @@ export default function WorkoutComplete() {
           </Card>
         </div>
 
+        {/* RPE Selection */}
+        <div className="w-full space-y-4">
+          <div className="text-center">
+            <h3 className="text-lg font-bold text-white mb-1">How hard was it?</h3>
+            <p className="text-sm text-muted-foreground">Rate your perceived exertion (1-5)</p>
+          </div>
+
+          <div className="grid grid-cols-5 gap-2">
+            {[1, 2, 3, 4, 5].map((rpe) => (
+              <button
+                key={rpe}
+                onClick={() => setSelectedRPE(rpe)}
+                className={cn(
+                  "aspect-square rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-1",
+                  selectedRPE === rpe
+                    ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(0,229,255,0.2)]"
+                    : "border-border/50 bg-card/50 hover:border-primary/50"
+                )}
+                data-testid={`rpe-${rpe}`}
+              >
+                <Star className={cn(
+                  "w-6 h-6",
+                  selectedRPE === rpe ? "text-primary fill-primary" : "text-muted-foreground"
+                )} />
+                <span className={cn(
+                  "text-lg font-display font-bold",
+                  selectedRPE === rpe ? "text-primary" : "text-muted-foreground"
+                )}>
+                  {rpe}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="flex justify-between text-xs text-muted-foreground px-1">
+            <span>Too Easy</span>
+            <span>Perfect</span>
+            <span>Too Hard</span>
+          </div>
+        </div>
+
         <Card className="w-full bg-card border-border/50 p-4 space-y-4 text-left">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
@@ -222,47 +263,6 @@ export default function WorkoutComplete() {
             className="bg-card border-border/50 text-white placeholder:text-muted-foreground"
             rows={3}
           />
-        </div>
-
-        {/* RPE Selection */}
-        <div className="w-full space-y-4">
-          <div className="text-center">
-            <h3 className="text-lg font-bold text-white mb-1">How hard was it?</h3>
-            <p className="text-sm text-muted-foreground">Rate your perceived exertion (1-5)</p>
-          </div>
-
-          <div className="grid grid-cols-5 gap-2">
-            {[1, 2, 3, 4, 5].map((rpe) => (
-              <button
-                key={rpe}
-                onClick={() => setSelectedRPE(rpe)}
-                className={cn(
-                  "aspect-square rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-1",
-                  selectedRPE === rpe
-                    ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(0,229,255,0.2)]"
-                    : "border-border/50 bg-card/50 hover:border-primary/50"
-                )}
-                data-testid={`rpe-${rpe}`}
-              >
-                <Star className={cn(
-                  "w-6 h-6",
-                  selectedRPE === rpe ? "text-primary fill-primary" : "text-muted-foreground"
-                )} />
-                <span className={cn(
-                  "text-lg font-display font-bold",
-                  selectedRPE === rpe ? "text-primary" : "text-muted-foreground"
-                )}>
-                  {rpe}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="flex justify-between text-xs text-muted-foreground px-1">
-            <span>Too Easy</span>
-            <span>Perfect</span>
-            <span>Too Hard</span>
-          </div>
         </div>
 
         <div className="w-full rounded-xl border border-primary/40 bg-primary/5 p-4 text-left flex gap-3 items-start">
