@@ -102,10 +102,15 @@ export default function WorkoutRunner() {
     if (!synth) return;
 
     const utterance = new SpeechSynthesisUtterance(message);
-    utterance.rate = 1;
+    utterance.rate = 0.9;
     utterance.pitch = 1;
-    synth.cancel();
-    synth.speak(utterance);
+    utterance.volume = 1;
+    
+    // Add small delay to let beep finish before speech starts
+    setTimeout(() => {
+      synth.cancel();
+      synth.speak(utterance);
+    }, 200);
   };
 
   useEffect(() => {
