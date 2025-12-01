@@ -225,7 +225,7 @@ export default function WorkoutRunner() {
         const nextRound = workout.rounds[currentRoundIndex + 1];
         setCurrentRoundIndex(i => i + 1);
         setSecondsLeft(60);
-        triggerIntervalCues(nextRound.exerciseName);
+        triggerIntervalCues(`${nextRound.exerciseName}, ${nextRound.reps} reps`);
       } else {
         goToWorkoutComplete();
       }
@@ -238,7 +238,7 @@ export default function WorkoutRunner() {
           setCurrentRoundIndex(i => i + 1);
           setSecondsLeft(workout.workSeconds || 20);
           setIsResting(false);
-          triggerIntervalCues(nextRound.exerciseName);
+          triggerIntervalCues(`${nextRound.exerciseName}, ${nextRound.reps} reps`);
         } else {
           goToWorkoutComplete();
         }
@@ -250,7 +250,7 @@ export default function WorkoutRunner() {
             setCurrentRoundIndex(i => i + 1);
             setSecondsLeft(workout.workSeconds || 20);
             setIsResting(false);
-            triggerIntervalCues(`Skipping rest, ${nextRound.exerciseName}`);
+            triggerIntervalCues(`Skipping rest, ${nextRound.exerciseName}, ${nextRound.reps} reps`);
           } else {
             goToWorkoutComplete();
           }
@@ -285,7 +285,7 @@ export default function WorkoutRunner() {
         } else {
           setSecondsLeft(45);
           setIsResting(false);
-          triggerIntervalCues(nextRound.exerciseName);
+          triggerIntervalCues(`${nextRound.exerciseName}, ${nextRound.reps} reps`);
         }
       } else {
         goToWorkoutComplete();
