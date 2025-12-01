@@ -197,9 +197,6 @@ export default function Home() {
               <span className="text-primary neon-text">SWEAT?</span>
             </h1>
           </div>
-          <div className="h-12 w-12 rounded-full bg-secondary border border-border flex items-center justify-center">
-            <Flame className="text-primary" />
-          </div>
         </div>
 
         {/* Main Action Card - Daily WOD */}
