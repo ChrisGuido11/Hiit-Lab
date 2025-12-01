@@ -205,15 +205,19 @@ export default function WorkoutRunner() {
     lastBeepSecondRef.current = null;
   }, [currentRoundIndex, isResting, settings.restAutoSkip]);
 
-  // Announce first exercise when timer starts
+  // Announce first exercise when timer starts (after prestart countdown ends)
   useEffect(() => {
-    if (!workout || !isActive || isPrestartCountdown) return;
-    if (!hasAnnouncedFirstRoundRef.current && currentRoundIndex === 0) {
-      const currentRound = workout.rounds[0];
-      triggerIntervalCues(`${currentRound.exerciseName}, ${currentRound.reps} reps`);
-      hasAnnouncedFirstRoundRef.current = true;
+    if (!workout || !isActive || isPrestartCountdown || currentRoundIndex !== 0) return;
+    if (!hasAnnouncedFirstRoundRef.current) {
+      // Small delay to ensure prestart countdown has fully finished
+      const announceTimer = setTimeout(() => {
+        const currentRound = workout.rounds[0];
+        triggerIntervalCues(`${currentRound.exerciseName}, ${currentRound.reps} reps`);
+        hasAnnouncedFirstRoundRef.current = true;
+      }, 100);
+      return () => clearTimeout(announceTimer);
     }
-  }, [isActive, isPrestartCountdown, workout]);
+  }, [isActive, isPrestartCountdown, workout, currentRoundIndex]);
 
   const vibrate = (duration = 150) => {
     if (!settings.intervalVibration || typeof navigator === "undefined") return;
@@ -333,9 +337,11 @@ export default function WorkoutRunner() {
     }
 
     if (settings.preStartCountdown && secondsLeft > 0) {
+      hasAnnouncedFirstRoundRef.current = false; // Reset for this new start
       setPrestartSecondsLeft(3);
       setIsPrestartCountdown(true);
     } else {
+      hasAnnouncedFirstRoundRef.current = false; // Reset for this new start
       setIsActive(true);
     }
   };
