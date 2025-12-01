@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Play, Pause, SkipForward, X, RotateCcw, Settings } from "lucide-react";
+import { Play, Pause, SkipForward, X, RotateCcw, Settings, BookOpen } from "lucide-react";
 import MobileLayout from "@/components/layout/mobile-layout";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -29,6 +29,7 @@ export default function WorkoutRunner() {
   const [wasActiveBeforeSettings, setWasActiveBeforeSettings] = useState(false);
   const [isPrestartCountdown, setIsPrestartCountdown] = useState(false);
   const [prestartSecondsLeft, setPrestartSecondsLeft] = useState(0);
+  const [isLessonsOpen, setIsLessonsOpen] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const prestartTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -580,7 +581,16 @@ export default function WorkoutRunner() {
           </div>
 
           {/* Controls */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-3">
+            <Button
+              variant="outline"
+              className="h-14 border-border/50 hover:bg-secondary/50 hover:text-white"
+              onClick={() => setIsLessonsOpen(true)}
+              data-testid="button-lessons"
+            >
+              <BookOpen size={20} />
+            </Button>
+
             <Button
               variant="outline"
               className="h-14 border-border/50 hover:bg-secondary/50 hover:text-white"
@@ -609,7 +619,7 @@ export default function WorkoutRunner() {
 
             <Button
               className={cn(
-                "h-14 text-lg font-bold uppercase tracking-wider text-black hover:opacity-90 transition-all",
+                "h-14 text-lg font-bold uppercase tracking-wider text-black hover:opacity-90 transition-all col-span-2",
                 isActive ? "bg-white" : "bg-primary neon-border"
               )}
               onClick={toggleTimer}
