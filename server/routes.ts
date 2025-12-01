@@ -12,6 +12,7 @@ import {
 import { pickFrameworkForGoal } from "@shared/goals";
 import { insertProfileSchema, insertWorkoutSessionSchema } from "@shared/schema";
 import { z } from "zod";
+import { workoutRoundsArraySchema } from "./utils/roundValidation";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -164,7 +165,13 @@ export async function registerRoutes(
       
       // Extract session data and rounds from request
       const { rounds, perceivedExertion, ...sessionData } = req.body;
-      
+
+      if (!Array.isArray(rounds)) {
+        return res
+          .status(400)
+          .json({ message: "Rounds are required and must be provided as an array" });
+      }
+
       // Validate session data
       const validatedSession = insertWorkoutSessionSchema.parse({
         ...sessionData,
@@ -172,12 +179,18 @@ export async function registerRoutes(
         perceivedExertion,
         completed: true,
       });
+
+      const parsedRounds = workoutRoundsArraySchema.safeParse(rounds);
+
+      if (!parsedRounds.success) {
+        return res.status(400).json({ message: "Invalid rounds data", errors: parsedRounds.error.errors });
+      }
       
       // Create workout session
       const session = await storage.createWorkoutSession(validatedSession);
       
       // Create workout rounds
-      const roundsData = rounds.map((round: any) => ({
+      const roundsData = parsedRounds.data.map((round) => ({
         sessionId: session.id,
         minuteIndex: round.minuteIndex,
         exerciseName: round.exerciseName,
