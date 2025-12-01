@@ -140,7 +140,7 @@ export default function WorkoutComplete() {
 
   return (
     <MobileLayout hideNav>
-      <div className="min-h-full flex flex-col items-center p-6 pt-8 pb-20 text-center space-y-8 bg-black">
+      <div className="min-h-full flex flex-col items-center p-6 pt-8 pb-32 text-center space-y-8 bg-black">
         <motion.div 
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -294,14 +294,16 @@ export default function WorkoutComplete() {
           />
         </div>
 
-        <Button
-          className="w-full h-14 text-lg font-bold uppercase tracking-wider bg-primary text-black hover:bg-primary/90 mt-8"
-          onClick={handleSave}
-          disabled={!selectedRPE || saveWorkoutMutation.isPending}
-          data-testid="button-save"
-        >
-          {saveWorkoutMutation.isPending ? "Logging..." : "Log Workout"}
-        </Button>
+        <div className="fixed bottom-0 left-0 right-0 px-6 pb-6 pt-4 bg-gradient-to-t from-black via-black/95 to-transparent">
+          <Button
+            className="w-full h-14 text-lg font-bold uppercase tracking-wider bg-primary text-black hover:bg-primary/90"
+            onClick={handleSave}
+            disabled={!selectedRPE || saveWorkoutMutation.isPending}
+            data-testid="button-save"
+          >
+            {saveWorkoutMutation.isPending ? "Logging..." : "Log Workout"}
+          </Button>
+        </div>
       </div>
     </MobileLayout>
   );
