@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Play, Pause, SkipForward, X, RotateCcw, Settings, BookOpen } from "lucide-react";
+import { Play, Pause, SkipForward, X, RotateCcw, Settings, BookOpen, ExternalLink } from "lucide-react";
 import MobileLayout from "@/components/layout/mobile-layout";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { GeneratedWorkout } from "@/../../shared/schema";
+import { getVideoUrlForExercise, hasDirectVideo } from "@/utils/exerciseVideos";
 
 type RunnerSettings = {
   soundCues: boolean;
@@ -760,16 +761,37 @@ export default function WorkoutRunner() {
               </SheetDescription>
             </SheetHeader>
 
-            <div className="flex-1 overflow-hidden">
-              <iframe
-                width="100%"
-                height="100%"
-                src={`https://www.youtube.com/embed/?listType=search&list=How%20to%20${encodeURIComponent(currentExercise?.exerciseName || "exercise")}`}
-                title="YouTube video player"
-                frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-              />
+            <div className="flex-1 overflow-hidden bg-black/40">
+              {currentExercise && hasDirectVideo(currentExercise.exerciseName) ? (
+                <iframe
+                  width="100%"
+                  height="100%"
+                  src={getVideoUrlForExercise(currentExercise.exerciseName)}
+                  title="YouTube video player"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center p-6">
+                  <div className="text-center space-y-4">
+                    <p className="text-muted-foreground">
+                      Video not available for this exercise yet.
+                    </p>
+                    <Button
+                      variant="outline"
+                      className="gap-2"
+                      onClick={() => {
+                        const url = `https://www.youtube.com/results?search_query=how+to+${encodeURIComponent(currentExercise?.exerciseName || "")}`;
+                        window.open(url, "_blank");
+                      }}
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Search YouTube
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="p-6 pt-4 bg-card border-t border-border/30">
