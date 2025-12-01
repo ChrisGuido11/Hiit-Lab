@@ -280,37 +280,52 @@ export function generateEMOMWorkout(
     return true;
   });
 
-  // Generate rounds with goal-biased exercise selection and variety tracking
+  // Generate rounds with aggressive variety tracking
   const rounds: GeneratedWorkout['rounds'] = [];
-  const usedExercises = new Map<string, number>(); // Track usage count
+  const usedExercises = new Map<string, number>(); // Track total usage count
+  const recentlyUsedExercises = new Map<string, number>(); // Track last used minute
 
   for (let i = 0; i < durationMinutes; i++) {
-    // Try to get variety - don't repeat same exercise consecutively
+    // Never repeat consecutive exercises
     const lastExercise = i > 0 ? rounds[i - 1].exerciseName : null;
     
-    // Filter: prioritize exercises that haven't been used yet, then avoid consecutive repeats
+    // Build candidates - filter out recently used (within last 3 minutes)
     let candidates = availableExercises.filter(ex => {
       if (ex.name === lastExercise) return false; // Never repeat consecutively
+      
+      // Penalize if used in last 3 minutes
+      const lastUsedMinute = recentlyUsedExercises.get(ex.name);
+      if (lastUsedMinute !== undefined && i - lastUsedMinute < 4) {
+        return false; // Too recent, exclude from candidates
+      }
+      
       return true;
     });
 
-    // Prefer exercises that haven't been used, or have been used less
+    // Prefer unused exercises
     const unusedExercises = candidates.filter(ex => !usedExercises.has(ex.name));
     const priorityCandidates = unusedExercises.length > 0 ? unusedExercises : candidates;
+    const finalCandidates = priorityCandidates.length > 0 ? priorityCandidates : availableExercises.filter(ex => ex.name !== lastExercise);
 
-    // Use weighted random selection based on goal bias
+    // Use weighted random selection with aggressive variety boost
     const exercise = weightedRandomSelection(
-      priorityCandidates.length > 0 ? priorityCandidates : candidates,
+      finalCandidates,
       (ex) => {
         let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
         
-        // Bonus for exercises not yet used (encourages variety)
+        // AGGRESSIVE BOOST: Unused exercises get 10x weight
         if (!usedExercises.has(ex.name)) {
-          baseScore *= 2; // Double the weight for unused exercises
+          baseScore *= 10;
         } else {
-          // Penalize exercises based on how many times they've been used
+          // Heavy penalty for recently used exercises
+          const lastUsedMinute = recentlyUsedExercises.get(ex.name);
+          if (lastUsedMinute !== undefined) {
+            const minutesSinceUse = i - lastUsedMinute;
+            baseScore = baseScore / (1 + Math.max(0, 5 - minutesSinceUse) * 2);
+          }
+          // Penalty for overall usage frequency
           const usageCount = usedExercises.get(ex.name) || 0;
-          baseScore = baseScore / (1 + usageCount * 0.5);
+          baseScore = baseScore / (1 + usageCount * 1.5);
         }
         
         return baseScore;
@@ -325,9 +340,10 @@ export function generateEMOMWorkout(
       reps: exercise.reps[difficultyTag],
     });
 
-    // Update usage count
+    // Update tracking
     const currentCount = usedExercises.get(exercise.name) || 0;
     usedExercises.set(exercise.name, currentCount + 1);
+    recentlyUsedExercises.set(exercise.name, i);
   }
 
   // Set focus label based on goal (use new goal label or fallback to legacy goalFocus)
