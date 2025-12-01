@@ -749,6 +749,39 @@ export default function WorkoutRunner() {
             </div>
           </SheetContent>
         </Sheet>
+
+        {/* Lessons YouTube Drawer */}
+        <Sheet open={isLessonsOpen} onOpenChange={setIsLessonsOpen}>
+          <SheetContent side="bottom" className="bg-card border-border/50 sm:max-w-md sm:rounded-t-3xl h-[90vh] flex flex-col p-0">
+            <SheetHeader className="p-6 pb-4">
+              <SheetTitle>How to: {currentExercise?.exerciseName}</SheetTitle>
+              <SheetDescription>
+                Watch a video lesson to master this exercise
+              </SheetDescription>
+            </SheetHeader>
+
+            <div className="flex-1 overflow-hidden">
+              <iframe
+                width="100%"
+                height="100%"
+                src={`https://www.youtube.com/embed/?listType=search&list=How%20to%20${encodeURIComponent(currentExercise?.exerciseName || "exercise")}`}
+                title="YouTube video player"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            </div>
+
+            <div className="p-6 pt-4 bg-card border-t border-border/30">
+              <Button
+                className="w-full bg-primary text-black hover:bg-primary/90 font-bold uppercase tracking-wider"
+                onClick={() => setIsLessonsOpen(false)}
+              >
+                Back to Workout
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </MobileLayout>
   );
