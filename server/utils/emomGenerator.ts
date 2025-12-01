@@ -414,18 +414,27 @@ export function generateTabataWorkout(
     return true;
   });
 
-  // Generate exercises
+  // Generate exercises with variety boost
   const rounds: GeneratedWorkout['rounds'] = [];
   const selectedExercises: Exercise[] = [];
+  const exerciseUsageCount = new Map<string, number>();
 
-  // Select unique exercises
+  // Select unique exercises with variety preference
   for (let i = 0; i < numExercises; i++) {
     const candidates = availableExercises.filter(ex => !selectedExercises.includes(ex));
     const exercise = weightedRandomSelection(
       candidates.length > 0 ? candidates : availableExercises,
-      (ex) => calculateExerciseFitnessScore(ex, exerciseBias)
+      (ex) => {
+        let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
+        // Boost unused exercises to encourage variety
+        if (!exerciseUsageCount.has(ex.name)) {
+          baseScore *= 1.5;
+        }
+        return baseScore;
+      }
     );
     selectedExercises.push(exercise);
+    exerciseUsageCount.set(exercise.name, (exerciseUsageCount.get(exercise.name) || 0) + 1);
   }
 
   // Create rounds: each exercise gets 8 intervals (4 minutes)
@@ -534,17 +543,26 @@ export function generateAMRAPWorkout(
     numExercises = 5 + Math.floor(Math.random() * 2); // 5-6
   }
 
-  // Select exercises for the circuit
+  // Select exercises for the circuit with variety boost
   const rounds: GeneratedWorkout['rounds'] = [];
   const circuitExercises: Exercise[] = [];
+  const exerciseUsageCount = new Map<string, number>();
 
   for (let i = 0; i < numExercises; i++) {
     const candidates = availableExercises.filter(ex => !circuitExercises.includes(ex));
     const exercise = weightedRandomSelection(
       candidates.length > 0 ? candidates : availableExercises,
-      (ex) => calculateExerciseFitnessScore(ex, exerciseBias)
+      (ex) => {
+        let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
+        // Boost unused exercises to encourage variety
+        if (!exerciseUsageCount.has(ex.name)) {
+          baseScore *= 1.5;
+        }
+        return baseScore;
+      }
     );
     circuitExercises.push(exercise);
+    exerciseUsageCount.set(exercise.name, (exerciseUsageCount.get(exercise.name) || 0) + 1);
   }
 
   // Create rounds array (the circuit repeats for duration)
@@ -648,16 +666,25 @@ export function generateCircuitWorkout(
     exercisesPerRound = 6 + Math.floor(Math.random() * 3); // 6-8
   }
 
-  // Select exercises for the circuit
+  // Select exercises for the circuit with variety boost
   const circuitExercises: Exercise[] = [];
+  const exerciseUsageCount = new Map<string, number>();
 
   for (let i = 0; i < exercisesPerRound; i++) {
     const candidates = availableExercises.filter(ex => !circuitExercises.includes(ex));
     const exercise = weightedRandomSelection(
       candidates.length > 0 ? candidates : availableExercises,
-      (ex) => calculateExerciseFitnessScore(ex, exerciseBias)
+      (ex) => {
+        let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
+        // Boost unused exercises to encourage variety
+        if (!exerciseUsageCount.has(ex.name)) {
+          baseScore *= 1.5;
+        }
+        return baseScore;
+      }
     );
     circuitExercises.push(exercise);
+    exerciseUsageCount.set(exercise.name, (exerciseUsageCount.get(exercise.name) || 0) + 1);
   }
 
   // Create rounds array (circuit repeated for totalRounds)
