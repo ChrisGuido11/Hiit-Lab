@@ -167,10 +167,12 @@ export default function WorkoutRunner() {
   useEffect(() => {
     if (!workout) return;
 
-    if (isActive && secondsLeft > 0 && !isPrestartCountdown) {
-      timerRef.current = setTimeout(() => setSecondsLeft(s => s - 1), 1000);
-    } else if (!isPrestartCountdown && secondsLeft === 0) {
-      handleIntervalComplete();
+    if (isActive && !isPrestartCountdown) {
+      if (secondsLeft > 0) {
+        timerRef.current = setTimeout(() => setSecondsLeft(s => s - 1), 1000);
+      } else if (secondsLeft === 0) {
+        handleIntervalComplete();
+      }
     }
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
