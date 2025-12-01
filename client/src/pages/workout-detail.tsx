@@ -166,7 +166,9 @@ export default function WorkoutDetail() {
                   ) : (
                     <>
                       <span className="text-2xl font-display font-bold text-white">{round.reps}</span>
-                      <p className="text-xs text-muted-foreground uppercase">Reps</p>
+                      <p className="text-xs text-muted-foreground uppercase">
+                        {(round as any).isHold ? "Seconds" : (round as any).alternatesSides ? `Reps (${round.reps / 2}/leg)` : "Reps"}
+                      </p>
                     </>
                   )}
                 </div>
