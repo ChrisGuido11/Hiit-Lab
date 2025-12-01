@@ -280,19 +280,41 @@ export function generateEMOMWorkout(
     return true;
   });
 
-  // Generate rounds with goal-biased exercise selection
+  // Generate rounds with goal-biased exercise selection and variety tracking
   const rounds: GeneratedWorkout['rounds'] = [];
-  const usedExercises = new Set<string>();
+  const usedExercises = new Map<string, number>(); // Track usage count
 
   for (let i = 0; i < durationMinutes; i++) {
     // Try to get variety - don't repeat same exercise consecutively
     const lastExercise = i > 0 ? rounds[i - 1].exerciseName : null;
-    const candidates = availableExercises.filter(ex => ex.name !== lastExercise);
+    
+    // Filter: prioritize exercises that haven't been used yet, then avoid consecutive repeats
+    let candidates = availableExercises.filter(ex => {
+      if (ex.name === lastExercise) return false; // Never repeat consecutively
+      return true;
+    });
+
+    // Prefer exercises that haven't been used, or have been used less
+    const unusedExercises = candidates.filter(ex => !usedExercises.has(ex.name));
+    const priorityCandidates = unusedExercises.length > 0 ? unusedExercises : candidates;
 
     // Use weighted random selection based on goal bias
     const exercise = weightedRandomSelection(
-      candidates.length > 0 ? candidates : availableExercises,
-      (ex) => calculateExerciseFitnessScore(ex, exerciseBias)
+      priorityCandidates.length > 0 ? priorityCandidates : candidates,
+      (ex) => {
+        let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
+        
+        // Bonus for exercises not yet used (encourages variety)
+        if (!usedExercises.has(ex.name)) {
+          baseScore *= 2; // Double the weight for unused exercises
+        } else {
+          // Penalize exercises based on how many times they've been used
+          const usageCount = usedExercises.get(ex.name) || 0;
+          baseScore = baseScore / (1 + usageCount * 0.5);
+        }
+        
+        return baseScore;
+      }
     );
 
     rounds.push({
@@ -303,7 +325,9 @@ export function generateEMOMWorkout(
       reps: exercise.reps[difficultyTag],
     });
 
-    usedExercises.add(exercise.name);
+    // Update usage count
+    const currentCount = usedExercises.get(exercise.name) || 0;
+    usedExercises.set(exercise.name, currentCount + 1);
   }
 
   // Set focus label based on goal (use new goal label or fallback to legacy goalFocus)
