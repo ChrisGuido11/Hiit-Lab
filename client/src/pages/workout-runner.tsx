@@ -274,7 +274,15 @@ export default function WorkoutRunner() {
           setCurrentRoundIndex(i => i + 1);
           setSecondsLeft(workout.workSeconds || 20);
           setIsResting(false);
-          triggerIntervalCues(`${nextRound.exerciseName}, ${nextRound.reps} reps`);
+          let repsText = "";
+          if ((nextRound as any).isHold) {
+            repsText = `${nextRound.reps} seconds`;
+          } else if ((nextRound as any).alternatesSides) {
+            repsText = `${nextRound.reps} reps, ${nextRound.reps / 2} each leg`;
+          } else {
+            repsText = `${nextRound.reps} reps`;
+          }
+          triggerIntervalCues(`${nextRound.exerciseName}, ${repsText}`);
         } else {
           goToWorkoutComplete();
         }
@@ -634,7 +642,15 @@ export default function WorkoutRunner() {
                   }
                   
                   // Announce the next exercise
-                  triggerIntervalCues(`${nextRound.exerciseName}, ${nextRound.reps} reps`);
+                  let repsText = "";
+                  if ((nextRound as any).isHold) {
+                    repsText = `${nextRound.reps} seconds`;
+                  } else if ((nextRound as any).alternatesSides) {
+                    repsText = `${nextRound.reps} reps, ${nextRound.reps / 2} each leg`;
+                  } else {
+                    repsText = `${nextRound.reps} reps`;
+                  }
+                  triggerIntervalCues(`${nextRound.exerciseName}, ${repsText}`);
                 } else {
                   goToWorkoutComplete();
                 }
