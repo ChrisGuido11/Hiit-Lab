@@ -15,6 +15,7 @@ import type { PrimaryGoalId } from "@shared/goals";
 import { getPrimaryGoalConfig, getCombinedExerciseBias, migrateLegacyGoal } from "@shared/goals";
 import type { GeneratedWorkout, SessionIntent } from "@shared/schema";
 import type { PersonalizationInsights, SessionPerformanceSummary } from "./personalization";
+import { calculateMuscleGroupLoad, derivePrimaryMuscleGroups } from "./personalization";
 
 interface Exercise {
   name: string;
@@ -240,6 +241,52 @@ function getEnergyLevelMultiplier(intent?: SessionIntent): number {
   return 1;
 }
 
+function isHighIntensityExercise(exercise: Exercise, difficultyTag: string): boolean {
+  return (
+    exercise.difficulty === "advanced" ||
+    exercise.categories.plyometric ||
+    (exercise.categories.compound && difficultyTag !== "beginner")
+  );
+}
+
+function getRecoveryAdjustment(
+  exercise: Exercise,
+  difficultyTag: string,
+  personalization?: PersonalizationInsights,
+): number {
+  if (!personalization?.muscleRecovery) return 1;
+  const recovery = personalization.muscleRecovery[exercise.muscleGroup];
+  if (!recovery) return 1;
+
+  // If still highly fatigued and exercise is high intensity, heavily down-weight
+  if (recovery.recoveryScore < 0.35 && isHighIntensityExercise(exercise, difficultyTag)) {
+    return 0.15;
+  }
+
+  // Soft penalty for any recovery under 70%
+  if (recovery.recoveryScore < 0.7) {
+    return clampNumber(recovery.recoveryScore + 0.15, 0.25, 1);
+  }
+
+  return clampNumber(1 + (recovery.recoveryScore - 0.8) * 0.25, 0.9, 1.15);
+}
+
+function filterExercisesForRecovery(
+  candidates: Exercise[],
+  difficultyTag: string,
+  personalization?: PersonalizationInsights,
+): Exercise[] {
+  if (!personalization?.muscleRecovery) return candidates;
+
+  const filtered = candidates.filter((ex) => {
+    const recovery = personalization.muscleRecovery[ex.muscleGroup];
+    if (!recovery) return true;
+    return !(recovery.recoveryScore < 0.35 && isHighIntensityExercise(ex, difficultyTag));
+  });
+
+  return filtered.length ? filtered : candidates;
+}
+
 function getIntensityMultiplier(personalization?: PersonalizationInsights): number {
   if (!personalization) return 1;
   const adjustment = (personalization.averageHitRate - 1) * 0.4 - personalization.skipRate * 0.35 - personalization.fatigueTrend * 0.25;
@@ -405,7 +452,7 @@ export function generateEMOMWorkout(
     // Build candidates - filter out recently used (within last 3 minutes)
     let candidates = availableExercises.filter(ex => {
       if (ex.name === lastExercise) return false; // Never repeat consecutively
-      
+
       // Penalize if used in last 3 minutes
       const lastUsedMinute = recentlyUsedExercises.get(ex.name);
       if (lastUsedMinute !== undefined && i - lastUsedMinute < 4) {
@@ -414,6 +461,8 @@ export function generateEMOMWorkout(
       
       return true;
     });
+
+    candidates = filterExercisesForRecovery(candidates, difficultyTag, personalization);
 
     // Prefer unused exercises
     const unusedExercises = candidates.filter(ex => !usedExercises.has(ex.name));
@@ -427,6 +476,7 @@ export function generateEMOMWorkout(
       (ex) => {
         let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
         baseScore *= getMusclePreferenceMultiplier(ex.muscleGroup, personalization);
+        baseScore *= getRecoveryAdjustment(ex, difficultyTag, personalization);
 
         // AGGRESSIVE BOOST: Unused exercises get 10x weight
         if (!usedExercises.has(ex.name)) {
@@ -464,6 +514,9 @@ export function generateEMOMWorkout(
     recentlyUsedExercises.set(exercise.name, i);
   }
 
+  const muscleGroupLoad = calculateMuscleGroupLoad(rounds);
+  const primaryMuscleGroups = derivePrimaryMuscleGroups(muscleGroupLoad);
+
   // Set focus label based on goal (use new goal label or fallback to legacy goalFocus)
   const focusLabel = intent?.focusToday ?? goalConfig?.label ?? goalFocus ?? "General Fitness";
 
@@ -481,6 +534,8 @@ export function generateEMOMWorkout(
     difficultyTag,
     focusLabel,
     rounds,
+    primaryMuscleGroups,
+    muscleGroupLoad,
     intent,
     rationale,
   };
@@ -581,13 +636,18 @@ export function generateTabataWorkout(
 
   // Select unique exercises with variety preference
   for (let i = 0; i < numExercises; i++) {
-    const candidates = availableExercises.filter(ex => !selectedExercises.includes(ex));
+    const candidates = filterExercisesForRecovery(
+      availableExercises.filter(ex => !selectedExercises.includes(ex)),
+      difficultyTag,
+      personalization,
+    );
     const exercise = banditSelectExercise(
       candidates.length > 0 ? candidates : availableExercises,
       personalization,
       (ex) => {
         let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
         baseScore *= getMusclePreferenceMultiplier(ex.muscleGroup, personalization);
+        baseScore *= getRecoveryAdjustment(ex, difficultyTag, personalization);
         // Boost unused exercises to encourage variety
         if (!exerciseUsageCount.has(ex.name)) {
           baseScore *= 1.5;
@@ -618,6 +678,9 @@ export function generateTabataWorkout(
       }
     }
 
+  const tabataMuscleLoad = calculateMuscleGroupLoad(rounds);
+  const tabataPrimaryMuscles = derivePrimaryMuscleGroups(tabataMuscleLoad);
+
   const focusLabel = intent?.focusToday ?? goalConfig?.label ?? goalFocus ?? "General Fitness";
 
   const rationale = {
@@ -634,6 +697,8 @@ export function generateTabataWorkout(
     difficultyTag,
     focusLabel,
     rounds,
+    primaryMuscleGroups: tabataPrimaryMuscles,
+    muscleGroupLoad: tabataMuscleLoad,
     workSeconds: Math.max(15, Math.round(20 * clampNumber(intensityMultiplier, 0.9, 1.15))),
     restSeconds: Math.max(8, Math.round(10 / clampNumber(intensityMultiplier, 0.9, 1.15))),
     sets: 8,
@@ -740,13 +805,18 @@ export function generateAMRAPWorkout(
   const exerciseUsageCount = new Map<string, number>();
 
   for (let i = 0; i < numExercises; i++) {
-    const candidates = availableExercises.filter(ex => !circuitExercises.includes(ex));
+    const candidates = filterExercisesForRecovery(
+      availableExercises.filter(ex => !circuitExercises.includes(ex)),
+      difficultyTag,
+      personalization,
+    );
     const exercise = banditSelectExercise(
       candidates.length > 0 ? candidates : availableExercises,
       personalization,
       (ex) => {
         let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
         baseScore *= getMusclePreferenceMultiplier(ex.muscleGroup, personalization);
+        baseScore *= getRecoveryAdjustment(ex, difficultyTag, personalization);
         // Boost unused exercises to encourage variety
         if (!exerciseUsageCount.has(ex.name)) {
           baseScore *= 1.5;
@@ -775,6 +845,9 @@ export function generateAMRAPWorkout(
     });
   }
 
+  const amrapMuscleLoad = calculateMuscleGroupLoad(rounds);
+  const amrapPrimaryMuscles = derivePrimaryMuscleGroups(amrapMuscleLoad);
+
   const focusLabel = intent?.focusToday ?? goalConfig?.label ?? goalFocus ?? "General Fitness";
 
   const rationale = {
@@ -791,6 +864,8 @@ export function generateAMRAPWorkout(
     difficultyTag,
     focusLabel,
     rounds,
+    primaryMuscleGroups: amrapPrimaryMuscles,
+    muscleGroupLoad: amrapMuscleLoad,
     intent,
     rationale,
   };
@@ -882,13 +957,18 @@ export function generateCircuitWorkout(
   const exerciseUsageCount = new Map<string, number>();
 
   for (let i = 0; i < exercisesPerRound; i++) {
-    const candidates = availableExercises.filter(ex => !circuitExercises.includes(ex));
+    const candidates = filterExercisesForRecovery(
+      availableExercises.filter(ex => !circuitExercises.includes(ex)),
+      difficultyTag,
+      personalization,
+    );
     const exercise = banditSelectExercise(
       candidates.length > 0 ? candidates : availableExercises,
       personalization,
       (ex) => {
         let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
         baseScore *= getMusclePreferenceMultiplier(ex.muscleGroup, personalization);
+        baseScore *= getRecoveryAdjustment(ex, difficultyTag, personalization);
         // Boost unused exercises to encourage variety
         if (!exerciseUsageCount.has(ex.name)) {
           baseScore *= 1.5;
@@ -919,6 +999,9 @@ export function generateCircuitWorkout(
         });
       }
     }
+
+  const circuitMuscleLoad = calculateMuscleGroupLoad(rounds);
+  const circuitPrimaryMuscles = derivePrimaryMuscleGroups(circuitMuscleLoad);
 
   // Calculate total duration (estimate: ~45s per exercise + rest between rounds)
   const baseRestBetweenRounds = difficultyTag === "beginner" ? 90 : difficultyTag === "intermediate" ? 60 : 45;
@@ -953,6 +1036,8 @@ export function generateCircuitWorkout(
     rounds,
     restSeconds: restBetweenRounds,
     totalRounds,
+    primaryMuscleGroups: circuitPrimaryMuscles,
+    muscleGroupLoad: circuitMuscleLoad,
     intent,
     rationale,
   };

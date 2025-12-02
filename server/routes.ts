@@ -20,6 +20,8 @@ import { workoutRoundsArraySchema } from "./utils/roundValidation";
 import {
   aggregateExerciseOutcomes,
   buildPersonalizationInsights,
+  calculateMuscleGroupLoad,
+  derivePrimaryMuscleGroups,
   summarizeSessionPerformance,
 } from "./utils/personalization";
 
@@ -231,9 +233,16 @@ export async function registerRoutes(
       if (!parsedRounds.success) {
         return res.status(400).json({ message: "Invalid rounds data", errors: parsedRounds.error.errors });
       }
-      
+
+      const muscleGroupLoad = calculateMuscleGroupLoad(parsedRounds.data);
+      const primaryMuscleGroups = derivePrimaryMuscleGroups(muscleGroupLoad);
+
       // Create workout session
-      const session = await storage.createWorkoutSession(validatedSession);
+      const session = await storage.createWorkoutSession({
+        ...validatedSession,
+        muscleGroupLoad,
+        primaryMuscleGroups,
+      });
 
       // Create workout rounds
       const roundsData = parsedRounds.data.map((round) => ({

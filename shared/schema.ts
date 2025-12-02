@@ -115,6 +115,8 @@ export const workoutSessions = pgTable("workout_sessions", {
   durationMinutes: integer("duration_minutes").notNull(),
   difficultyTag: text("difficulty_tag").notNull(), // "beginner", "intermediate", "advanced"
   focusLabel: text("focus_label").notNull(), // "cardio", "strength", "metcon"
+  primaryMuscleGroups: jsonb("primary_muscle_groups").default(sql`'[]'::jsonb`).notNull().$type<string[]>(),
+  muscleGroupLoad: jsonb("muscle_group_load").default(sql`'{}'::jsonb`).notNull().$type<Record<string, number>>(),
   perceivedExertion: integer("perceived_exertion"), // 1-5 RPE
   notes: text("notes"),
   completed: boolean("completed").default(false).notNull(),
@@ -136,6 +138,8 @@ export const insertWorkoutSessionSchema = createInsertSchema(workoutSessions)
   })
   .extend({
     framework: z.enum(workoutFrameworks),
+    primaryMuscleGroups: z.array(z.string()).default([]),
+    muscleGroupLoad: z.record(z.number()).default({}),
   });
 
 export type InsertWorkoutSession = z.infer<typeof insertWorkoutSessionSchema>;
@@ -219,4 +223,6 @@ export interface GeneratedWorkout {
     intensity: string;
     exerciseSelection: string;
   };
+  primaryMuscleGroups?: string[];
+  muscleGroupLoad?: Record<string, number>;
 }

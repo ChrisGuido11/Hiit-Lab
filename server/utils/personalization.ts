@@ -15,6 +15,29 @@ export interface PersonalizationInsights {
   fatigueTrend: number;
   exercisePreference: Record<string, number>;
   exerciseScores: Record<string, ExerciseScore>;
+  muscleRecovery: Record<string, { lastTrainedAt: Date | null; recoveryScore: number }>;
+}
+
+const clampNumber = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+export function calculateMuscleGroupLoad(
+  rounds: Array<Pick<WorkoutRound, "targetMuscleGroup">>,
+): Record<string, number> {
+  return rounds.reduce<Record<string, number>>((acc, round) => {
+    const group = round.targetMuscleGroup;
+    acc[group] = (acc[group] ?? 0) + 1;
+    return acc;
+  }, {});
+}
+
+export function derivePrimaryMuscleGroups(
+  muscleGroupLoad: Record<string, number>,
+  limit = 2,
+): string[] {
+  return Object.entries(muscleGroupLoad)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([group]) => group);
 }
 
 export interface SessionPerformanceSummary {
@@ -38,10 +61,24 @@ export function buildPersonalizationInsights(
   const preferenceBuckets: Record<string, { score: number; count: number }> = {};
   const rpeValues: number[] = [];
   const exerciseBuckets: Record<string, { accept: number; skip: number; completion: number; qualitySum: number }> = {};
+  const recoveryTracker: Record<string, { lastTrainedAt: Date; load: number }> = {};
 
   for (const session of recent) {
     if (typeof session.perceivedExertion === "number") {
       rpeValues.push(session.perceivedExertion);
+    }
+
+    const muscleGroupLoad = Object.keys(session.muscleGroupLoad ?? {}).length
+      ? (session.muscleGroupLoad as Record<string, number>)
+      : calculateMuscleGroupLoad(session.rounds);
+
+    for (const [group, load] of Object.entries(muscleGroupLoad)) {
+      if (!recoveryTracker[group]) {
+        recoveryTracker[group] = {
+          lastTrainedAt: new Date(session.createdAt ?? new Date()),
+          load,
+        };
+      }
     }
 
     for (const round of session.rounds) {
@@ -120,6 +157,18 @@ export function buildPersonalizationInsights(
     }),
   );
 
+  const now = new Date();
+  const muscleRecovery = Object.fromEntries(
+    Object.entries(recoveryTracker).map(([muscleGroup, data]) => {
+      const elapsedHours = Math.max(0, (now.getTime() - data.lastTrainedAt.getTime()) / (1000 * 60 * 60));
+      const timeRecovery = clampNumber(elapsedHours / 48, 0, 1); // Full recovery assumed after ~48h
+      const loadPenalty = clampNumber(data.load / 40, 0, 0.4);
+      const recoveryScore = clampNumber(timeRecovery - loadPenalty * 0.8, 0, 1);
+
+      return [muscleGroup, { lastTrainedAt: data.lastTrainedAt, recoveryScore }];
+    }),
+  );
+
   return {
     averageHitRate,
     skipRate,
@@ -127,6 +176,7 @@ export function buildPersonalizationInsights(
     fatigueTrend,
     exercisePreference,
     exerciseScores,
+    muscleRecovery,
   };
 }
 
