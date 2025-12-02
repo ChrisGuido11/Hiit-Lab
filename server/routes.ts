@@ -10,6 +10,7 @@ import {
   updateSkillScore
 } from "./utils/emomGenerator";
 import { pickFrameworkForGoal } from "@shared/goals";
+import { getMicrocycleTemplate, pickMicrocycleDay } from "@shared/programming";
 import { insertProfileSchema, insertWorkoutSessionSchema } from "@shared/schema";
 import { z } from "zod";
 import { workoutRoundsArraySchema } from "./utils/roundValidation";
@@ -116,6 +117,10 @@ export async function registerRoutes(
       const history = await storage.getWorkoutSessions(userId);
       const personalization = buildPersonalizationInsights(history);
 
+      // Derive today's microcycle slot
+      const microcycleTemplate = getMicrocycleTemplate(profile.primaryGoal ?? null, profile.goalWeights ?? undefined);
+      const { dayPlan } = pickMicrocycleDay(microcycleTemplate);
+
       // Check for framework override from query parameter
       const frameworkOverride = req.query.framework as string | undefined;
 
@@ -123,6 +128,8 @@ export async function registerRoutes(
       if (frameworkOverride && ['EMOM', 'Tabata', 'AMRAP', 'Circuit'].includes(frameworkOverride)) {
         // User explicitly chose a framework (from Workout Lab)
         selectedFramework = frameworkOverride.toLowerCase();
+      } else if (dayPlan?.framework) {
+        selectedFramework = dayPlan.framework.toLowerCase();
       } else {
         // Use AI goal-based selection (Daily WOD)
         selectedFramework = pickFrameworkForGoal(profile.primaryGoal ?? null);
@@ -138,6 +145,7 @@ export async function registerRoutes(
         profile.primaryGoal ?? null,
         profile.goalWeights ?? undefined,
         personalization,
+        dayPlan,
       ] as const;
 
       switch (selectedFramework) {

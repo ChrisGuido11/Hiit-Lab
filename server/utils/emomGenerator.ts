@@ -13,6 +13,7 @@ import type { EquipmentId } from "@shared/equipment";
 import { getEquipmentRichness, migrateEquipment } from "@shared/equipment";
 import type { PrimaryGoalId } from "@shared/goals";
 import { getPrimaryGoalConfig, getCombinedExerciseBias, migrateLegacyGoal } from "@shared/goals";
+import type { MicrocycleDayPlan } from "@shared/programming";
 import type { GeneratedWorkout } from "@shared/schema";
 import type { PersonalizationInsights, SessionPerformanceSummary } from "./personalization";
 
@@ -199,6 +200,30 @@ function normalizeExerciseBias(
 
 const clampNumber = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
+function getTemplateIntensityMultiplier(intensity?: MicrocycleDayPlan["intensity"]): number {
+  if (!intensity) return 1;
+  switch (intensity) {
+    case "low":
+      return 0.92;
+    case "high":
+      return 1.12;
+    default:
+      return 1;
+  }
+}
+
+function resolveDuration(
+  template: MicrocycleDayPlan | undefined,
+  min: number,
+  max: number,
+  fallback: () => number
+): number {
+  if (template?.durationMinutes) {
+    return clampNumber(template.durationMinutes, min, max);
+  }
+  return clampNumber(fallback(), min, max);
+}
+
 function getIntensityMultiplier(personalization?: PersonalizationInsights): number {
   if (!personalization) return 1;
   const adjustment = (personalization.averageHitRate - 1) * 0.4 - personalization.skipRate * 0.35 - personalization.fatigueTrend * 0.25;
@@ -219,7 +244,8 @@ export function generateEMOMWorkout(
   goalFocus: string | null,
   primaryGoal?: PrimaryGoalId | null,
   goalWeights?: Record<PrimaryGoalId, number>,
-  personalization?: PersonalizationInsights
+  personalization?: PersonalizationInsights,
+  templateDay?: MicrocycleDayPlan
 ): GeneratedWorkout {
   // Migrate legacy goalFocus to new primaryGoal if needed
   let resolvedPrimaryGoal = primaryGoal || migrateLegacyGoal(goalFocus);
@@ -244,43 +270,51 @@ export function generateEMOMWorkout(
     difficultyTag = "advanced";
   }
 
-  const intensityMultiplier = getIntensityMultiplier(personalization);
+  const baseIntensityMultiplier = getIntensityMultiplier(personalization);
+  const intensityMultiplier = baseIntensityMultiplier * getTemplateIntensityMultiplier(templateDay?.intensity);
 
-  // Determine duration based on goal preferences, difficulty, and equipment richness
-  let durationMinutes: number;
+  // Determine duration based on goal preferences, difficulty, equipment richness, and template override
+  let durationMinutes = resolveDuration(
+    templateDay,
+    8,
+    35,
+    () => {
+      if (goalConfig && goalConfig.preferredDurationsMinutes) {
+        const [minDuration, maxDuration] = goalConfig.preferredDurationsMinutes;
+        let planned = minDuration + Math.floor(Math.random() * (maxDuration - minDuration + 1));
 
-  if (goalConfig && goalConfig.preferredDurationsMinutes) {
-    // Use goal-specific duration range
-    const [minDuration, maxDuration] = goalConfig.preferredDurationsMinutes;
-    durationMinutes = minDuration + Math.floor(Math.random() * (maxDuration - minDuration + 1));
+        if (difficultyTag === "beginner") {
+          planned = Math.max(minDuration, planned - 5);
+        } else if (difficultyTag === "advanced") {
+          planned = Math.min(maxDuration, planned + 3);
+        }
 
-    // Adjust for difficulty level
-    if (difficultyTag === "beginner") {
-      durationMinutes = Math.max(minDuration, durationMinutes - 5);
-    } else if (difficultyTag === "advanced") {
-      durationMinutes = Math.min(maxDuration, durationMinutes + 3);
-    }
+        if (equipmentRichness === "full") {
+          planned += 2;
+        }
 
-    // Full equipment allows slightly longer sessions
-    if (equipmentRichness === "full") {
-      durationMinutes += 2;
-    }
-  } else {
-    // Fallback to original duration logic
-    if (difficultyTag === "beginner") {
-      durationMinutes = 8 + Math.floor(Math.random() * 5); // 8-12
-    } else if (difficultyTag === "intermediate") {
-      durationMinutes = 12 + Math.floor(Math.random() * 9); // 12-20
-      if (equipmentRichness === "full") {
-        durationMinutes += 2;
+        return planned;
       }
-    } else {
-      durationMinutes = 20 + Math.floor(Math.random() * 11); // 20-30
-      if (equipmentRichness === "full") {
-        durationMinutes += 3;
+
+      if (difficultyTag === "beginner") {
+        return 8 + Math.floor(Math.random() * 5); // 8-12
       }
+
+      if (difficultyTag === "intermediate") {
+        let duration = 12 + Math.floor(Math.random() * 9); // 12-20
+        if (equipmentRichness === "full") {
+          duration += 2;
+        }
+        return duration;
+      }
+
+      let duration = 20 + Math.floor(Math.random() * 11); // 20-30
+      if (equipmentRichness === "full") {
+        duration += 3;
+      }
+      return duration;
     }
-  }
+  );
 
   if (personalization) {
     const durationTuning = clampNumber(
@@ -405,7 +439,8 @@ export function generateTabataWorkout(
   goalFocus: string | null,
   primaryGoal?: PrimaryGoalId | null,
   goalWeights?: Record<PrimaryGoalId, number>,
-  personalization?: PersonalizationInsights
+  personalization?: PersonalizationInsights,
+  templateDay?: MicrocycleDayPlan
 ): GeneratedWorkout {
   // Migrate legacy goalFocus to new primaryGoal if needed
   let resolvedPrimaryGoal = primaryGoal || migrateLegacyGoal(goalFocus);
@@ -430,7 +465,12 @@ export function generateTabataWorkout(
     difficultyTag = "advanced";
   }
 
-  const intensityMultiplier = getIntensityMultiplier(personalization);
+  const baseIntensityMultiplier = getIntensityMultiplier(personalization);
+  const intensityMultiplier = clampNumber(
+    baseIntensityMultiplier * getTemplateIntensityMultiplier(templateDay?.intensity),
+    0.85,
+    1.35
+  );
 
   // Tabata: 2-3 exercises (8-12 minutes total)
   // Each exercise is 4 minutes (8 rounds of 20s work / 10s rest)
@@ -453,6 +493,13 @@ export function generateTabataWorkout(
     );
     durationMinutes = Math.max(6, Math.round(durationMinutes * tuning));
   }
+
+  durationMinutes = resolveDuration(
+    templateDay,
+    4,
+    16,
+    () => durationMinutes
+  );
 
     // Get exercise bias from goal weights
     const rawExerciseBias = goalWeights && resolvedPrimaryGoal
@@ -545,7 +592,8 @@ export function generateAMRAPWorkout(
   goalFocus: string | null,
   primaryGoal?: PrimaryGoalId | null,
   goalWeights?: Record<PrimaryGoalId, number>,
-  personalization?: PersonalizationInsights
+  personalization?: PersonalizationInsights,
+  templateDay?: MicrocycleDayPlan
 ): GeneratedWorkout {
   // Migrate legacy goalFocus to new primaryGoal if needed
   let resolvedPrimaryGoal = primaryGoal || migrateLegacyGoal(goalFocus);
@@ -570,26 +618,36 @@ export function generateAMRAPWorkout(
     difficultyTag = "advanced";
   }
 
-  const intensityMultiplier = getIntensityMultiplier(personalization);
+  const baseIntensityMultiplier = getIntensityMultiplier(personalization);
+  const intensityMultiplier = baseIntensityMultiplier * getTemplateIntensityMultiplier(templateDay?.intensity);
 
   // AMRAP: 10-20 minutes typical duration
-  let durationMinutes: number;
-  if (difficultyTag === "beginner") {
-    durationMinutes = 10 + Math.floor(Math.random() * 3); // 10-12 minutes
-  } else if (difficultyTag === "intermediate") {
-    durationMinutes = 12 + Math.floor(Math.random() * 5); // 12-16 minutes
-  } else {
-    durationMinutes = 15 + Math.floor(Math.random() * 6); // 15-20 minutes
-  }
+  const durationMinutes = resolveDuration(
+    templateDay,
+    8,
+    22,
+    () => {
+      let planned: number;
+      if (difficultyTag === "beginner") {
+        planned = 10 + Math.floor(Math.random() * 3); // 10-12 minutes
+      } else if (difficultyTag === "intermediate") {
+        planned = 12 + Math.floor(Math.random() * 5); // 12-16 minutes
+      } else {
+        planned = 15 + Math.floor(Math.random() * 6); // 15-20 minutes
+      }
 
-  if (personalization) {
-    const tuning = clampNumber(
-      1 + (personalization.averageHitRate - 1) * 0.3 - personalization.skipRate * 0.25,
-      0.85,
-      1.2
-    );
-    durationMinutes = Math.max(8, Math.round(durationMinutes * tuning));
-  }
+      if (personalization) {
+        const tuning = clampNumber(
+          1 + (personalization.averageHitRate - 1) * 0.3 - personalization.skipRate * 0.25,
+          0.85,
+          1.2
+        );
+        planned = Math.max(8, Math.round(planned * tuning));
+      }
+
+      return planned;
+    }
+  );
 
     // Get exercise bias from goal weights
     const rawExerciseBias = goalWeights && resolvedPrimaryGoal
@@ -683,7 +741,8 @@ export function generateCircuitWorkout(
   goalFocus: string | null,
   primaryGoal?: PrimaryGoalId | null,
   goalWeights?: Record<PrimaryGoalId, number>,
-  personalization?: PersonalizationInsights
+  personalization?: PersonalizationInsights,
+  templateDay?: MicrocycleDayPlan
 ): GeneratedWorkout {
   // Migrate legacy goalFocus to new primaryGoal if needed
   let resolvedPrimaryGoal = primaryGoal || migrateLegacyGoal(goalFocus);
@@ -708,7 +767,8 @@ export function generateCircuitWorkout(
     difficultyTag = "advanced";
   }
 
-  const intensityMultiplier = getIntensityMultiplier(personalization);
+  const baseIntensityMultiplier = getIntensityMultiplier(personalization);
+  const intensityMultiplier = baseIntensityMultiplier * getTemplateIntensityMultiplier(templateDay?.intensity);
 
   // Circuit: 3-5 rounds
   let totalRounds: number;
@@ -798,9 +858,15 @@ export function generateCircuitWorkout(
         clampNumber(1 + (personalization?.fatigueTrend ?? 0) * 0.3 - (personalization?.averageHitRate ?? 1 - 1) * 0.2, 0.75, 1.25),
     ),
   );
-  const durationMinutes = Math.ceil(
-    (exercisesPerRound * 0.75 * totalRounds * clampNumber(intensityMultiplier, 0.9, 1.2)) +
-      ((totalRounds - 1) * restBetweenRounds / 60)
+  const durationMinutes = resolveDuration(
+    templateDay,
+    12,
+    35,
+    () =>
+      Math.ceil(
+        (exercisesPerRound * 0.75 * totalRounds * clampNumber(intensityMultiplier, 0.9, 1.2)) +
+          ((totalRounds - 1) * restBetweenRounds / 60)
+      )
   );
 
   const focusLabel = goalConfig?.label ?? goalFocus ?? "General Fitness";
