@@ -25,6 +25,14 @@ import {
   computeTimeBlockPerformance,
   summarizeSessionPerformance,
 } from "./utils/personalization";
+import { getRecoveryScores } from "./utils/recovery";
+import { getWeekStart } from "./utils/periodization";
+import { getFrameworkPreferences, selectFrameworkWithPreferences, updateFrameworkPreference } from "./utils/frameworkPreferences";
+import { getStreakStatus, applyStreakAdjustments } from "./utils/streakAware";
+import { updatePersonalRecords } from "./utils/personalRecords";
+import { updateMasteryScores } from "./utils/mastery";
+import { updateRecoveryAfterWorkout } from "./utils/recovery";
+import { updateWeeklyVolume } from "./utils/periodization";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -126,7 +134,29 @@ export async function registerRoutes(
 
       const history = await storage.getWorkoutSessions(userId);
       const exerciseStats = await storage.getExerciseStats(userId);
-      const personalization = buildPersonalizationInsights(history, 8, exerciseStats);
+      
+      // Fetch additional personalization data
+      const recoveryRecords = await storage.getMuscleGroupRecovery(userId);
+      const allMuscleGroups = new Set<string>();
+      history.forEach(s => s.rounds.forEach(r => allMuscleGroups.add(r.targetMuscleGroup)));
+      const recoveryScores = await getRecoveryScores(userId, Array.from(allMuscleGroups));
+      
+      const masteryRecords = await storage.getExerciseMastery(userId);
+      const masteryScores = new Map<string, number>();
+      masteryRecords.forEach(m => masteryScores.set(m.exerciseName, m.masteryScore));
+      
+      const weekStart = getWeekStart(new Date());
+      const periodization = await storage.getWeeklyPeriodization(userId, weekStart);
+      const weeklyVolume = periodization?.muscleGroupVolume ?? {};
+      
+      const personalization = buildPersonalizationInsights(
+        history, 
+        8, 
+        exerciseStats,
+        recoveryScores,
+        masteryScores,
+        weeklyVolume
+      );
 
       const requestIntent = workoutGenerationRequestSchema.parse(req.query);
 
@@ -145,13 +175,17 @@ export async function registerRoutes(
       const recommendedPerformance =
         recommendedTimeBlock && personalization.timeBlockBias?.performanceByBlock?.[recommendedTimeBlock];
 
+      // Get framework preferences for selection
+      const frameworkPrefs = await getFrameworkPreferences(userId);
+      const goalFramework = pickFrameworkForGoal(profile.primaryGoal ?? null) as any;
+
       let selectedFramework: string;
       if (frameworkOverride && ['EMOM', 'Tabata', 'AMRAP', 'Circuit'].includes(frameworkOverride)) {
         // User explicitly chose a framework (from Workout Lab)
         selectedFramework = frameworkOverride.toLowerCase();
       } else {
-        // Use AI goal-based selection (Daily WOD)
-        selectedFramework = pickFrameworkForGoal(profile.primaryGoal ?? null);
+        // Use framework preferences with goal-based fallback
+        selectedFramework = selectFrameworkWithPreferences(goalFramework, frameworkPrefs, 0.15).toLowerCase();
 
         // Allow intent to gently steer the framework choice when no override is present
         if (sessionIntent.energyLevel === "low" && selectedFramework === "tabata") {
@@ -161,6 +195,9 @@ export async function registerRoutes(
           selectedFramework = "circuit";
         }
       }
+
+      // Get streak status for adjustments
+      const streakStatus = getStreakStatus(history);
 
       // Generate workout using appropriate framework generator
       let workout;
@@ -173,6 +210,7 @@ export async function registerRoutes(
         profile.goalWeights ?? undefined,
         personalization,
         sessionIntent,
+        history, // Pass history for progressive overload
       ] as const;
 
       switch (selectedFramework) {
@@ -190,6 +228,9 @@ export async function registerRoutes(
           workout = generateEMOMWorkout(...commonParams);
           break;
       }
+
+      // Apply streak-aware adjustments
+      workout = applyStreakAdjustments(workout, streakStatus);
 
       const frameworkReason = frameworkOverride
         ? `Framework pinned to ${frameworkOverride} from user selection.`
@@ -287,6 +328,23 @@ export async function registerRoutes(
       
       const profile = await storage.getProfile(userId);
       const history = await storage.getWorkoutSessions(userId);
+      const sessionWithRounds = { ...session, rounds: roundsData as any };
+
+      // Update personal records
+      await updatePersonalRecords(userId, session, roundsData as any);
+
+      // Update mastery scores
+      const exerciseStats = await storage.getExerciseStats(userId);
+      await updateMasteryScores(userId, sessionWithRounds, history, exerciseStats);
+
+      // Update recovery scores
+      await updateRecoveryAfterWorkout(userId, session, roundsData as any);
+
+      // Update weekly volume
+      await updateWeeklyVolume(userId, session, roundsData as any);
+
+      // Update framework preferences
+      await updateFrameworkPreference(userId, sessionWithRounds, history);
 
       if (profile) {
         const profileUpdates: Partial<InsertProfile> = {};
@@ -320,6 +378,61 @@ export async function registerRoutes(
       }
       console.error("Error creating workout session:", error);
       res.status(500).json({ message: "Failed to create workout session" });
+    }
+  });
+
+  // ==================== PERSONAL RECORDS ====================
+  app.get('/api/personal-records', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const records = await storage.getPersonalRecords(userId);
+      res.json(records);
+    } catch (error) {
+      console.error("Error fetching personal records:", error);
+      res.status(500).json({ message: "Failed to fetch personal records" });
+    }
+  });
+
+  // ==================== EXERCISE MASTERY ====================
+  app.get('/api/mastery', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const mastery = await storage.getExerciseMastery(userId);
+      res.json(mastery);
+    } catch (error) {
+      console.error("Error fetching mastery:", error);
+      res.status(500).json({ message: "Failed to fetch mastery scores" });
+    }
+  });
+
+  // ==================== RECOVERY STATUS ====================
+  app.get('/api/recovery', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const recovery = await storage.getMuscleGroupRecovery(userId);
+      // Recalculate recovery scores based on current time
+      const { getRecoveryScores } = await import("./utils/recovery");
+      const allMuscleGroups = recovery.map(r => r.muscleGroup);
+      const scores = await getRecoveryScores(userId, allMuscleGroups);
+      const recoveryMap = Object.fromEntries(scores);
+      res.json(recoveryMap);
+    } catch (error) {
+      console.error("Error fetching recovery:", error);
+      res.status(500).json({ message: "Failed to fetch recovery status" });
+    }
+  });
+
+  // ==================== WEEKLY VOLUME ====================
+  app.get('/api/weekly-volume', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { getWeekStart } = await import("./utils/periodization");
+      const weekStart = getWeekStart(new Date());
+      const periodization = await storage.getWeeklyPeriodization(userId, weekStart);
+      res.json(periodization?.muscleGroupVolume ?? {});
+    } catch (error) {
+      console.error("Error fetching weekly volume:", error);
+      res.status(500).json({ message: "Failed to fetch weekly volume" });
     }
   });
 

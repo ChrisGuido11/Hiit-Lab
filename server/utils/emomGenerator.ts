@@ -13,8 +13,12 @@ import type { EquipmentId } from "@shared/equipment";
 import { getEquipmentRichness, migrateEquipment } from "@shared/equipment";
 import type { PrimaryGoalId } from "@shared/goals";
 import { getPrimaryGoalConfig, getCombinedExerciseBias, migrateLegacyGoal } from "@shared/goals";
-import type { GeneratedWorkout, SessionIntent } from "@shared/schema";
+import type { GeneratedWorkout, SessionIntent, WorkoutSession, WorkoutRound } from "@shared/schema";
 import type { PersonalizationInsights, SessionPerformanceSummary } from "./personalization";
+import { getRecoveryPenalty } from "./recovery";
+import { getMasteryDifficultyAdjustment } from "./mastery";
+import { getVolumeBias } from "./periodization";
+import { applyProgressiveOverload } from "./progressiveOverload";
 
 interface Exercise {
   name: string;
@@ -299,7 +303,8 @@ export function generateEMOMWorkout(
   primaryGoal?: PrimaryGoalId | null,
   goalWeights?: Record<PrimaryGoalId, number>,
   personalization?: PersonalizationInsights,
-  intent?: SessionIntent
+  intent?: SessionIntent,
+  sessionHistory?: Array<WorkoutSession & { rounds: WorkoutRound[] }>
 ): GeneratedWorkout {
   // Migrate legacy goalFocus to new primaryGoal if needed
   let resolvedPrimaryGoal = primaryGoal || migrateLegacyGoal(goalFocus);
@@ -380,7 +385,7 @@ export function generateEMOMWorkout(
       : goalConfig?.exerciseBias ?? { compound: 0.5, cardio: 0.5, plyometric: 0.5, mobility: 0.2 };
     const exerciseBias = applyIntentBias(normalizeExerciseBias(rawExerciseBias), intent);
 
-  // Filter exercises by equipment and difficulty
+  // Filter exercises by equipment and difficulty, with recovery-aware filtering
   const availableExercises = EXERCISES.filter((ex) => {
     // Check if user has ALL required equipment for this exercise
     const hasAllEquipment = ex.equipment.every(eq => equipmentSet.has(eq));
@@ -389,6 +394,12 @@ export function generateEMOMWorkout(
     // Filter by difficulty tier
     if (difficultyTag === "beginner" && ex.difficulty === "advanced") return false;
     if (difficultyTag === "beginner" && ex.difficulty === "intermediate" && Math.random() > 0.3) return false;
+
+    // Recovery-aware filtering: avoid exercises targeting unrecovered muscle groups
+    if (personalization?.recoveryScores) {
+      const recoveryScore = personalization.recoveryScores.get(ex.muscleGroup) ?? 1.0;
+      if (recoveryScore < 0.3) return false; // Very low recovery, exclude
+    }
 
     return true;
   });
@@ -428,6 +439,31 @@ export function generateEMOMWorkout(
         let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
         baseScore *= getMusclePreferenceMultiplier(ex.muscleGroup, personalization);
 
+        // Recovery-aware penalty: reduce score for unrecovered muscle groups
+        if (personalization?.recoveryScores) {
+          const recoveryScore = personalization.recoveryScores.get(ex.muscleGroup) ?? 1.0;
+          baseScore *= getRecoveryPenalty(recoveryScore);
+        }
+
+        // Volume biasing: boost exercises for underworked muscle groups
+        if (personalization?.weeklyVolume) {
+          const volume = personalization.weeklyVolume[ex.muscleGroup];
+          if (volume) {
+            // Calculate volume bias (async function, but we'll approximate here)
+            const allVolumes = Object.values(personalization.weeklyVolume).map(v => v.volume);
+            const avgVolume = allVolumes.length > 0 
+              ? allVolumes.reduce((a, b) => a + b, 0) / allVolumes.length 
+              : 0;
+            if (avgVolume > 0) {
+              const ratio = volume.volume / avgVolume;
+              if (ratio < 0.5) baseScore *= 1.5; // Significantly underworked
+              else if (ratio < 0.8) baseScore *= 1.2; // Slightly underworked
+              else if (ratio > 1.5) baseScore *= 0.7; // Overworked
+              else if (ratio > 1.2) baseScore *= 0.9; // Slightly overworked
+            }
+          }
+        }
+
         // AGGRESSIVE BOOST: Unused exercises get 10x weight
         if (!usedExercises.has(ex.name)) {
           baseScore *= 10;
@@ -448,12 +484,22 @@ export function generateEMOMWorkout(
       0.12,
     );
 
+    // Calculate base reps with mastery adjustment
+    let baseReps = exercise.reps[difficultyTag] * intensityMultiplier;
+    if (personalization?.masteryScores) {
+      const masteryScore = personalization.masteryScores.get(exercise.name) ?? null;
+      if (masteryScore !== null) {
+        const masteryAdjustment = getMasteryDifficultyAdjustment(masteryScore);
+        baseReps *= masteryAdjustment;
+      }
+    }
+
     rounds.push({
       minuteIndex: i + 1,
       exerciseName: exercise.name,
       targetMuscleGroup: exercise.muscleGroup,
       difficulty: exercise.difficulty,
-      reps: Math.max(1, Math.round(exercise.reps[difficultyTag] * intensityMultiplier)),
+      reps: Math.max(1, Math.round(baseReps)),
       isHold: exercise.isHold || false,
       alternatesSides: exercise.alternatesSides || false,
     });
@@ -466,6 +512,18 @@ export function generateEMOMWorkout(
 
   // Set focus label based on goal (use new goal label or fallback to legacy goalFocus)
   const focusLabel = intent?.focusToday ?? goalConfig?.label ?? goalFocus ?? "General Fitness";
+
+  // Apply progressive overload if history is available
+  let finalRounds = rounds;
+  if (sessionHistory && personalization?.masteryScores) {
+    const masteryMap = new Map<string, number>();
+    for (const [exercise, score] of personalization.masteryScores.entries()) {
+      masteryMap.set(exercise, score);
+    }
+    const workoutForOverload = { rounds: finalRounds };
+    applyProgressiveOverload(workoutForOverload, sessionHistory, masteryMap);
+    finalRounds = workoutForOverload.rounds;
+  }
 
   const rationale = {
     framework: intent?.focusToday
@@ -480,7 +538,7 @@ export function generateEMOMWorkout(
     durationMinutes,
     difficultyTag,
     focusLabel,
-    rounds,
+    rounds: finalRounds,
     intent,
     rationale,
   };
@@ -501,7 +559,8 @@ export function generateTabataWorkout(
   primaryGoal?: PrimaryGoalId | null,
   goalWeights?: Record<PrimaryGoalId, number>,
   personalization?: PersonalizationInsights,
-  intent?: SessionIntent
+  intent?: SessionIntent,
+  sessionHistory?: Array<WorkoutSession & { rounds: WorkoutRound[] }>
 ): GeneratedWorkout {
   // Migrate legacy goalFocus to new primaryGoal if needed
   let resolvedPrimaryGoal = primaryGoal || migrateLegacyGoal(goalFocus);
@@ -657,7 +716,8 @@ export function generateAMRAPWorkout(
   primaryGoal?: PrimaryGoalId | null,
   goalWeights?: Record<PrimaryGoalId, number>,
   personalization?: PersonalizationInsights,
-  intent?: SessionIntent
+  intent?: SessionIntent,
+  sessionHistory?: Array<WorkoutSession & { rounds: WorkoutRound[] }>
 ): GeneratedWorkout {
   // Migrate legacy goalFocus to new primaryGoal if needed
   let resolvedPrimaryGoal = primaryGoal || migrateLegacyGoal(goalFocus);
@@ -811,7 +871,8 @@ export function generateCircuitWorkout(
   primaryGoal?: PrimaryGoalId | null,
   goalWeights?: Record<PrimaryGoalId, number>,
   personalization?: PersonalizationInsights,
-  intent?: SessionIntent
+  intent?: SessionIntent,
+  sessionHistory?: Array<WorkoutSession & { rounds: WorkoutRound[] }>
 ): GeneratedWorkout {
   // Migrate legacy goalFocus to new primaryGoal if needed
   let resolvedPrimaryGoal = primaryGoal || migrateLegacyGoal(goalFocus);

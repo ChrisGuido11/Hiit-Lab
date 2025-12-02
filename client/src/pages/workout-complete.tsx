@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Brain, CheckCircle2, Share2, Star } from "lucide-react";
+import { Brain, CheckCircle2, Share2, Star, Trophy, Target, Activity } from "lucide-react";
 import { motion } from "framer-motion";
 import MobileLayout from "@/components/layout/mobile-layout";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { GeneratedWorkout } from "@/../../shared/schema";
+import { useQuery } from "@tanstack/react-query";
+import { getQueryFn } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/useAuth";
 
 type RoundActual = {
   actualReps?: number;
@@ -20,11 +23,25 @@ type RoundActual = {
 export default function WorkoutComplete() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [selectedRPE, setSelectedRPE] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
   const [roundsExpanded, setRoundsExpanded] = useState(false);
   const [roundActuals, setRoundActuals] = useState<Record<number, RoundActual>>({});
+  const [newPRs, setNewPRs] = useState<string[]>([]);
+
+  const { data: personalRecords = [] } = useQuery<any[]>({
+    queryKey: ["/api/personal-records"],
+    enabled: !!user,
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+
+  const { data: mastery = [] } = useQuery<any[]>({
+    queryKey: ["/api/mastery"],
+    enabled: !!user,
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
 
   const { data: workout, isLoading: isFallbackLoading } = useQuery<GeneratedWorkout | null>({
     queryKey: ["/api/workout/generate"],
@@ -87,12 +104,38 @@ export default function WorkoutComplete() {
 
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       if (typeof window !== "undefined") {
         window.sessionStorage.removeItem("latestWorkoutCompletion");
       }
       queryClient.invalidateQueries({ queryKey: ["/api/workout/history"] });
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/personal-records"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/mastery"] });
+      
+      // Check for new PRs
+      const updatedPRs = await fetch("/api/personal-records", { credentials: "include" })
+        .then(res => res.ok ? res.json() : [])
+        .catch(() => []);
+      
+      if (workout && updatedPRs.length > 0) {
+        const workoutExercises = new Set(workout.rounds.map((r: any) => r.exerciseName));
+        const newPRExercises = updatedPRs
+          .filter((pr: any) => workoutExercises.has(pr.exerciseName))
+          .map((pr: any) => pr.exerciseName);
+        
+        if (newPRExercises.length > 0) {
+          setNewPRs(newPRExercises);
+          toast({
+            title: "🎉 New Personal Records!",
+            description: `You set ${newPRExercises.length} new PR${newPRExercises.length > 1 ? 's' : ''}!`,
+          });
+          // Don't redirect immediately if PRs were set - let user see the celebration
+          setTimeout(() => setLocation("/"), 3000);
+          return;
+        }
+      }
+      
       // Clear the workout cache completely so it doesn't show old workouts
       queryClient.removeQueries({ queryKey: ["/api/workout/generate"] });
       toast({
@@ -201,6 +244,49 @@ export default function WorkoutComplete() {
           <h1 className="text-5xl font-bold text-white mb-2">CRUSHED IT!</h1>
           <p className="text-xl text-muted-foreground">Workout Complete</p>
         </div>
+
+        {/* PR Celebration */}
+        {newPRs.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="w-full"
+          >
+            <Card className="p-6 bg-gradient-to-r from-primary/20 to-primary/10 border-primary/40">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <Trophy className="w-8 h-8 text-primary" />
+                <h2 className="text-2xl font-bold text-primary">New Personal Records!</h2>
+              </div>
+              <div className="space-y-2">
+                {newPRs.map((exerciseName) => (
+                  <div key={exerciseName} className="flex items-center justify-center gap-2 p-2 bg-primary/10 rounded">
+                    <Star className="w-4 h-4 text-primary fill-primary" />
+                    <span className="font-bold text-white">{exerciseName}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Mastery Progress */}
+        {mastery && mastery.length > 0 && workout && (() => {
+          const workoutExercises = new Set(workout.rounds.map((r: any) => r.exerciseName));
+          const relevantMastery = mastery.filter((m: any) => workoutExercises.has(m.exerciseName));
+          const improvedMastery = relevantMastery.filter((m: any) => m.masteryScore >= 70);
+          
+          return improvedMastery.length > 0 ? (
+            <Card className="p-4 bg-card/40 border-border/40 w-full">
+              <div className="flex items-center gap-2 mb-3">
+                <Target className="w-5 h-5 text-primary" />
+                <h3 className="font-bold text-white">Mastery Progress</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {improvedMastery.length} exercise{improvedMastery.length > 1 ? 's' : ''} showing strong mastery (70%+)
+              </p>
+            </Card>
+          ) : null;
+        })()}
 
         <div className="grid grid-cols-2 gap-4 w-full">
           <Card className="p-4 bg-card border-border/50 text-center">

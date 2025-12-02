@@ -13,6 +13,7 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 import MobileLayout from "@/components/layout/mobile-layout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import {
   LogOut,
@@ -29,6 +30,7 @@ import {
   Target,
   Heart,
   Zap,
+  Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -84,6 +86,24 @@ export default function Profile() {
 
   const { data: history = [] } = useQuery<Array<WorkoutSession & { rounds: WorkoutRound[] }>>({
     queryKey: ["/api/workout/history"],
+    enabled: !!user,
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+
+  const { data: personalRecords = [] } = useQuery<any[]>({
+    queryKey: ["/api/personal-records"],
+    enabled: !!user,
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+
+  const { data: mastery = [] } = useQuery<any[]>({
+    queryKey: ["/api/mastery"],
+    enabled: !!user,
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+
+  const { data: recovery = {} } = useQuery<Record<string, number>>({
+    queryKey: ["/api/recovery"],
     enabled: !!user,
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
@@ -533,6 +553,103 @@ export default function Profile() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+          </Card>
+        )}
+
+        {/* Personal Records */}
+        {personalRecords && personalRecords.length > 0 && (
+          <Card className="p-5 bg-card/40 border-border/40">
+            <div className="flex items-center gap-2 mb-4">
+              <Trophy className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-bold text-white">Personal Records</h2>
+            </div>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {personalRecords.slice(0, 10).map((pr: any) => (
+                <div key={pr.id} className="flex items-center justify-between p-2 bg-secondary/30 rounded">
+                  <div>
+                    <p className="font-bold text-white text-sm">{pr.exerciseName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {pr.bestReps !== null && `${pr.bestReps} reps`}
+                      {pr.bestReps !== null && pr.bestSeconds !== null && " • "}
+                      {pr.bestSeconds !== null && `${pr.bestSeconds}s`}
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="text-xs">
+                    PR
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {/* Exercise Mastery */}
+        {mastery && mastery.length > 0 && (
+          <Card className="p-5 bg-card/40 border-border/40">
+            <div className="flex items-center gap-2 mb-4">
+              <Target className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-bold text-white">Exercise Mastery</h2>
+            </div>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {mastery
+                .sort((a: any, b: any) => b.masteryScore - a.masteryScore)
+                .slice(0, 10)
+                .map((m: any) => (
+                  <div key={m.id} className="flex items-center justify-between p-2 bg-secondary/30 rounded">
+                    <div className="flex-1">
+                      <p className="font-bold text-white text-sm">{m.exerciseName}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-primary transition-all"
+                            style={{ width: `${m.masteryScore}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground font-bold">
+                          {Math.round(m.masteryScore)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </Card>
+        )}
+
+        {/* Recovery Status */}
+        {recovery && Object.keys(recovery).length > 0 && (
+          <Card className="p-5 bg-card/40 border-border/40">
+            <div className="flex items-center gap-2 mb-4">
+              <Activity className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-bold text-white">Recovery Status</h2>
+            </div>
+            <div className="space-y-2">
+              {Object.entries(recovery)
+                .sort(([, a], [, b]) => (a as number) - (b as number))
+                .slice(0, 8)
+                .map(([muscleGroup, score]) => {
+                  const recoveryPercent = Math.round((score as number) * 100);
+                  const isLow = (score as number) < 0.5;
+                  return (
+                    <div key={muscleGroup} className="flex items-center justify-between p-2 bg-secondary/30 rounded">
+                      <div className="flex-1">
+                        <p className="font-bold text-white text-sm capitalize">{muscleGroup}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all ${isLow ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                              style={{ width: `${recoveryPercent}%` }}
+                            />
+                          </div>
+                          <span className={`text-xs font-bold ${isLow ? 'text-amber-400' : 'text-emerald-400'}`}>
+                            {recoveryPercent}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
           </Card>
         )}
 

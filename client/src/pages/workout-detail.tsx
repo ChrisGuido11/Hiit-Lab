@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Play, RotateCw, Zap, Flame, Infinity, Repeat } from "lucide-react";
+import { ArrowLeft, Play, RotateCw, Zap, Flame, Infinity, Repeat, Trophy, Target, Activity } from "lucide-react";
 import MobileLayout from "@/components/layout/mobile-layout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FRAMEWORK_CONFIGS, Framework } from "@/../../shared/frameworks";
 import type { GeneratedWorkout } from "@/../../shared/schema";
+import { useQuery } from "@tanstack/react-query";
+import { getQueryFn } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/useAuth";
 
 type WorkoutDetailData = GeneratedWorkout & { notes?: string; perceivedExertion?: number; createdAt?: string };
 
@@ -21,10 +24,29 @@ const FRAMEWORK_ICONS: Record<Framework, typeof Zap> = {
 
 export default function WorkoutDetail() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
   const [historyWorkout, setHistoryWorkout] = useState<WorkoutDetailData | null>(null);
 
   const { data: workout, isLoading, refetch } = useQuery<GeneratedWorkout>({
     queryKey: ["/api/workout/generate"],
+  });
+
+  const { data: personalRecords = [] } = useQuery<any[]>({
+    queryKey: ["/api/personal-records"],
+    enabled: !!user,
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+
+  const { data: mastery = [] } = useQuery<any[]>({
+    queryKey: ["/api/mastery"],
+    enabled: !!user,
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+
+  const { data: recovery = {} } = useQuery<Record<string, number>>({
+    queryKey: ["/api/recovery"],
+    enabled: !!user,
+    queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
   useEffect(() => {
@@ -174,41 +196,75 @@ export default function WorkoutDetail() {
           {/* Exercise List */}
           <div className="space-y-2">
             <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">Exercises</h3>
-            {activeWorkout.rounds.map((round: any, idx: number) => (
-              <Card key={idx} className="p-4 bg-card/40 border-border/40 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center font-display text-lg font-bold text-primary">
-                    {round.minuteIndex}
+            {activeWorkout.rounds.map((round: any, idx: number) => {
+              const pr = personalRecords.find((pr: any) => pr.exerciseName === round.exerciseName);
+              const masteryRecord = mastery.find((m: any) => m.exerciseName === round.exerciseName);
+              const recoveryScore = recovery[round.targetMuscleGroup];
+              const isPROpportunity = pr ? (round.isHold 
+                ? (pr.bestSeconds === null || round.reps >= (pr.bestSeconds * 0.9))
+                : (pr.bestReps === null || round.reps >= (pr.bestReps * 0.9))
+              ) : true;
+
+              return (
+                <Card key={idx} className="p-4 bg-card/40 border-border/40">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center font-display text-lg font-bold text-primary">
+                        {round.minuteIndex}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-white">{round.exerciseName}</h4>
+                        <p className="text-xs text-muted-foreground capitalize">{round.targetMuscleGroup}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      {activeWorkout.framework === "Tabata" ? (
+                        <>
+                          <span className="text-2xl font-display font-bold text-white">{activeWorkout.workSeconds ?? 20}s</span>
+                          <p className="text-xs text-muted-foreground uppercase">
+                            Interval • {activeWorkout.sets || 8} rounds
+                          </p>
+                          {round.reps ? (
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                              Target ~{round.reps} reps
+                            </p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-2xl font-display font-bold text-white">{round.reps}</span>
+                          <p className="text-xs text-muted-foreground uppercase">
+                            {(round as any).isHold ? "Seconds" : (round as any).alternatesSides ? `Reps (${round.reps / 2}/leg)` : "Reps"}
+                          </p>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-bold text-white">{round.exerciseName}</h4>
-                    <p className="text-xs text-muted-foreground capitalize">{round.targetMuscleGroup}</p>
+                  
+                  {/* PR and Mastery indicators */}
+                  <div className="flex items-center gap-2 flex-wrap mt-2">
+                    {isPROpportunity && (
+                      <div className="flex items-center gap-1 px-2 py-1 bg-primary/10 border border-primary/20 rounded text-[10px]">
+                        <Trophy className="w-3 h-3 text-primary" />
+                        <span className="text-primary font-bold">PR Opportunity</span>
+                      </div>
+                    )}
+                    {masteryRecord && (
+                      <div className="flex items-center gap-1 px-2 py-1 bg-secondary/30 border border-border/40 rounded text-[10px]">
+                        <Target className="w-3 h-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">Mastery: {Math.round(masteryRecord.masteryScore)}%</span>
+                      </div>
+                    )}
+                    {recoveryScore !== undefined && recoveryScore < 0.5 && (
+                      <div className="flex items-center gap-1 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded text-[10px]">
+                        <Activity className="w-3 h-3 text-amber-400" />
+                        <span className="text-amber-400">Low Recovery</span>
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div className="text-right">
-                  {activeWorkout.framework === "Tabata" ? (
-                    <>
-                      <span className="text-2xl font-display font-bold text-white">{activeWorkout.workSeconds ?? 20}s</span>
-                      <p className="text-xs text-muted-foreground uppercase">
-                        Interval • {activeWorkout.sets || 8} rounds
-                      </p>
-                      {round.reps ? (
-                        <p className="text-[10px] text-muted-foreground mt-1">
-                          Target ~{round.reps} reps
-                        </p>
-                      ) : null}
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-2xl font-display font-bold text-white">{round.reps}</span>
-                      <p className="text-xs text-muted-foreground uppercase">
-                        {(round as any).isHold ? "Seconds" : (round as any).alternatesSides ? `Reps (${round.reps / 2}/leg)` : "Reps"}
-                      </p>
-                    </>
-                  )}
-                </div>
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
         </div>
 

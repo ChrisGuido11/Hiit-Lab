@@ -205,6 +205,95 @@ export const exerciseStats = pgTable(
 export type ExerciseStat = typeof exerciseStats.$inferSelect;
 export type InsertExerciseStat = typeof exerciseStats.$inferInsert;
 
+// Personal records table - Track best performance per exercise
+export const personalRecords = pgTable(
+  "personal_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+    exerciseName: text("exercise_name").notNull(),
+    bestReps: integer("best_reps"),
+    bestSeconds: integer("best_seconds"),
+    bestSessionId: uuid("best_session_id").references(() => workoutSessions.id, { onDelete: 'set null' }),
+    achievedAt: timestamp("achieved_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("personal_records_user_exercise_idx").on(table.userId, table.exerciseName)]
+);
+
+export type PersonalRecord = typeof personalRecords.$inferSelect;
+export type InsertPersonalRecord = typeof personalRecords.$inferInsert;
+
+// Exercise mastery table - Track mastery scores per exercise
+export const exerciseMastery = pgTable(
+  "exercise_mastery",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+    exerciseName: text("exercise_name").notNull(),
+    masteryScore: doublePrecision("mastery_score").default(0).notNull(), // 0-100
+    totalAttempts: integer("total_attempts").default(0).notNull(),
+    successfulAttempts: integer("successful_attempts").default(0).notNull(),
+    lastUpdated: timestamp("last_updated").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("exercise_mastery_user_exercise_idx").on(table.userId, table.exerciseName)]
+);
+
+export type ExerciseMastery = typeof exerciseMastery.$inferSelect;
+export type InsertExerciseMastery = typeof exerciseMastery.$inferInsert;
+
+// Muscle group recovery table - Track recovery state per muscle group
+export const muscleGroupRecovery = pgTable(
+  "muscle_group_recovery",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+    muscleGroup: text("muscle_group").notNull(),
+    recoveryScore: doublePrecision("recovery_score").default(1.0).notNull(), // 0-1, 1 = fully recovered
+    lastWorkedAt: timestamp("last_worked_at").defaultNow().notNull(),
+    workoutIntensity: doublePrecision("workout_intensity").default(1.0).notNull(), // 0-1
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("muscle_group_recovery_user_muscle_idx").on(table.userId, table.muscleGroup)]
+);
+
+export type MuscleGroupRecovery = typeof muscleGroupRecovery.$inferSelect;
+export type InsertMuscleGroupRecovery = typeof muscleGroupRecovery.$inferInsert;
+
+// Weekly periodization table - Track weekly muscle group volume
+export const weeklyPeriodization = pgTable(
+  "weekly_periodization",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+    weekStart: timestamp("week_start").notNull(), // Start of week (Monday)
+    muscleGroupVolume: jsonb("muscle_group_volume").notNull().$type<Record<string, { volume: number; sessions: number }>>(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("weekly_periodization_user_week_idx").on(table.userId, table.weekStart)]
+);
+
+export type WeeklyPeriodization = typeof weeklyPeriodization.$inferSelect;
+export type InsertWeeklyPeriodization = typeof weeklyPeriodization.$inferInsert;
+
+// Framework preferences table - Track user framework preferences
+export const frameworkPreferences = pgTable(
+  "framework_preferences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+    framework: text("framework").notNull().$type<WorkoutFramework>(),
+    preferenceScore: doublePrecision("preference_score").default(0.5).notNull(), // 0-1
+    completionRate: doublePrecision("completion_rate").default(1.0).notNull(), // 0-1
+    averageRpe: doublePrecision("average_rpe"),
+    lastUsedAt: timestamp("last_used_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("framework_preferences_user_framework_idx").on(table.userId, table.framework)]
+);
+
+export type FrameworkPreference = typeof frameworkPreferences.$inferSelect;
+export type InsertFrameworkPreference = typeof frameworkPreferences.$inferInsert;
+
 // Generated workout type (returned by AI workout generators)
 export interface GeneratedWorkout {
   framework: WorkoutFramework;

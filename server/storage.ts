@@ -4,6 +4,11 @@ import {
   workoutSessions,
   workoutRounds,
   exerciseStats,
+  personalRecords,
+  exerciseMastery,
+  muscleGroupRecovery,
+  weeklyPeriodization,
+  frameworkPreferences,
   type User,
   type UpsertUser,
   type Profile,
@@ -14,9 +19,19 @@ import {
   type InsertWorkoutRound,
   type ExerciseStat,
   type InsertExerciseStat,
+  type PersonalRecord,
+  type InsertPersonalRecord,
+  type ExerciseMastery,
+  type InsertExerciseMastery,
+  type MuscleGroupRecovery,
+  type InsertMuscleGroupRecovery,
+  type WeeklyPeriodization,
+  type InsertWeeklyPeriodization,
+  type FrameworkPreference,
+  type InsertFrameworkPreference,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and } from "drizzle-orm";
 import type { EquipmentId } from "@shared/equipment";
 
 type ProfileInsert = typeof profiles.$inferInsert;
@@ -43,6 +58,26 @@ export interface IStorage {
   // Exercise performance stats
   upsertExerciseStats(userId: string, stats: Array<Omit<InsertExerciseStat, "userId" | "id">>): Promise<ExerciseStat[]>;
   getExerciseStats(userId: string): Promise<ExerciseStat[]>;
+
+  // Personal records
+  getPersonalRecords(userId: string): Promise<PersonalRecord[]>;
+  upsertPersonalRecord(userId: string, record: Omit<InsertPersonalRecord, "userId" | "id">): Promise<PersonalRecord>;
+
+  // Exercise mastery
+  getExerciseMastery(userId: string): Promise<ExerciseMastery[]>;
+  upsertExerciseMastery(userId: string, mastery: Omit<InsertExerciseMastery, "userId" | "id">): Promise<ExerciseMastery>;
+
+  // Muscle group recovery
+  getMuscleGroupRecovery(userId: string): Promise<MuscleGroupRecovery[]>;
+  upsertMuscleGroupRecovery(userId: string, recovery: Omit<InsertMuscleGroupRecovery, "userId" | "id">): Promise<MuscleGroupRecovery>;
+
+  // Weekly periodization
+  getWeeklyPeriodization(userId: string, weekStart?: Date): Promise<WeeklyPeriodization | undefined>;
+  upsertWeeklyPeriodization(userId: string, periodization: Omit<InsertWeeklyPeriodization, "userId" | "id">): Promise<WeeklyPeriodization>;
+
+  // Framework preferences
+  getFrameworkPreferences(userId: string): Promise<FrameworkPreference[]>;
+  upsertFrameworkPreference(userId: string, preference: Omit<InsertFrameworkPreference, "userId" | "id">): Promise<FrameworkPreference>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -186,6 +221,162 @@ export class DatabaseStorage implements IStorage {
 
   async getExerciseStats(userId: string): Promise<ExerciseStat[]> {
     return db.select().from(exerciseStats).where(eq(exerciseStats.userId, userId));
+  }
+
+  // Personal records operations
+  async getPersonalRecords(userId: string): Promise<PersonalRecord[]> {
+    return db.select().from(personalRecords).where(eq(personalRecords.userId, userId));
+  }
+
+  async upsertPersonalRecord(userId: string, record: Omit<InsertPersonalRecord, "userId" | "id">): Promise<PersonalRecord> {
+    // Check if record exists
+    const existing = await db
+      .select()
+      .from(personalRecords)
+      .where(eq(personalRecords.userId, userId))
+      .where(eq(personalRecords.exerciseName, record.exerciseName))
+      .limit(1);
+
+    if (existing.length > 0) {
+      const existingRecord = existing[0];
+      let shouldUpdate = false;
+      const updates: Partial<InsertPersonalRecord> = {};
+
+      // Check if new record is better
+      if (record.bestReps !== null && (existingRecord.bestReps === null || record.bestReps > existingRecord.bestReps)) {
+        updates.bestReps = record.bestReps;
+        updates.bestSessionId = record.bestSessionId;
+        updates.achievedAt = record.achievedAt;
+        shouldUpdate = true;
+      }
+      if (record.bestSeconds !== null && (existingRecord.bestSeconds === null || record.bestSeconds > existingRecord.bestSeconds)) {
+        updates.bestSeconds = record.bestSeconds;
+        updates.bestSessionId = record.bestSessionId;
+        updates.achievedAt = record.achievedAt;
+        shouldUpdate = true;
+      }
+
+      if (shouldUpdate) {
+        const [updated] = await db
+          .update(personalRecords)
+          .set(updates)
+          .where(eq(personalRecords.id, existingRecord.id))
+          .returning();
+        return updated;
+      }
+      return existingRecord;
+    } else {
+      // Insert new record
+      const [newRecord] = await db
+        .insert(personalRecords)
+        .values({ ...record, userId })
+        .returning();
+      return newRecord;
+    }
+  }
+
+  // Exercise mastery operations
+  async getExerciseMastery(userId: string): Promise<ExerciseMastery[]> {
+    return db.select().from(exerciseMastery).where(eq(exerciseMastery.userId, userId));
+  }
+
+  async upsertExerciseMastery(userId: string, mastery: Omit<InsertExerciseMastery, "userId" | "id">): Promise<ExerciseMastery> {
+    const [em] = await db
+      .insert(exerciseMastery)
+      .values({ ...mastery, userId })
+      .onConflictDoUpdate({
+        target: [exerciseMastery.userId, exerciseMastery.exerciseName],
+        set: {
+          masteryScore: mastery.masteryScore,
+          totalAttempts: mastery.totalAttempts,
+          successfulAttempts: mastery.successfulAttempts,
+          lastUpdated: sql`now()`,
+        },
+      })
+      .returning();
+    return em;
+  }
+
+  // Muscle group recovery operations
+  async getMuscleGroupRecovery(userId: string): Promise<MuscleGroupRecovery[]> {
+    return db.select().from(muscleGroupRecovery).where(eq(muscleGroupRecovery.userId, userId));
+  }
+
+  async upsertMuscleGroupRecovery(userId: string, recovery: Omit<InsertMuscleGroupRecovery, "userId" | "id">): Promise<MuscleGroupRecovery> {
+    const [mgr] = await db
+      .insert(muscleGroupRecovery)
+      .values({ ...recovery, userId })
+      .onConflictDoUpdate({
+        target: [muscleGroupRecovery.userId, muscleGroupRecovery.muscleGroup],
+        set: {
+          recoveryScore: recovery.recoveryScore,
+          lastWorkedAt: recovery.lastWorkedAt,
+          workoutIntensity: recovery.workoutIntensity,
+          updatedAt: sql`now()`,
+        },
+      })
+      .returning();
+    return mgr;
+  }
+
+  // Weekly periodization operations
+  async getWeeklyPeriodization(userId: string, weekStart?: Date): Promise<WeeklyPeriodization | undefined> {
+    if (weekStart) {
+      const [wp] = await db
+        .select()
+        .from(weeklyPeriodization)
+        .where(and(
+          eq(weeklyPeriodization.userId, userId),
+          eq(weeklyPeriodization.weekStart, weekStart)
+        ));
+      return wp;
+    }
+    // Get most recent week
+    const [wp] = await db
+      .select()
+      .from(weeklyPeriodization)
+      .where(eq(weeklyPeriodization.userId, userId))
+      .orderBy(desc(weeklyPeriodization.weekStart))
+      .limit(1);
+    return wp;
+  }
+
+  async upsertWeeklyPeriodization(userId: string, periodization: Omit<InsertWeeklyPeriodization, "userId" | "id">): Promise<WeeklyPeriodization> {
+    const [wp] = await db
+      .insert(weeklyPeriodization)
+      .values({ ...periodization, userId })
+      .onConflictDoUpdate({
+        target: [weeklyPeriodization.userId, weeklyPeriodization.weekStart],
+        set: {
+          muscleGroupVolume: periodization.muscleGroupVolume,
+          updatedAt: sql`now()`,
+        },
+      })
+      .returning();
+    return wp;
+  }
+
+  // Framework preferences operations
+  async getFrameworkPreferences(userId: string): Promise<FrameworkPreference[]> {
+    return db.select().from(frameworkPreferences).where(eq(frameworkPreferences.userId, userId));
+  }
+
+  async upsertFrameworkPreference(userId: string, preference: Omit<InsertFrameworkPreference, "userId" | "id">): Promise<FrameworkPreference> {
+    const [fp] = await db
+      .insert(frameworkPreferences)
+      .values({ ...preference, userId })
+      .onConflictDoUpdate({
+        target: [frameworkPreferences.userId, frameworkPreferences.framework],
+        set: {
+          preferenceScore: preference.preferenceScore,
+          completionRate: preference.completionRate,
+          averageRpe: preference.averageRpe,
+          lastUsedAt: preference.lastUsedAt,
+          updatedAt: sql`now()`,
+        },
+      })
+      .returning();
+    return fp;
   }
 }
 

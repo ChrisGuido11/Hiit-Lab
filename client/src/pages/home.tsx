@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
-import { Play, TrendingUp, Flame, Clock, ArrowRight, RotateCw, Beaker, Flame as FlameIcon, Zap } from "lucide-react";
+import { Play, TrendingUp, Flame, Clock, ArrowRight, RotateCw, Beaker, Flame as FlameIcon, Zap, Trophy, Target, Activity } from "lucide-react";
 import MobileLayout from "@/components/layout/mobile-layout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -85,6 +85,24 @@ export default function Home() {
 
   const { data: history = [] } = useQuery<WorkoutSession[] | null>({
     queryKey: ["/api/workout/history"],
+    enabled: !!user,
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+
+  const { data: personalRecords = [] } = useQuery<any[]>({
+    queryKey: ["/api/personal-records"],
+    enabled: !!user,
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+
+  const { data: mastery = [] } = useQuery<any[]>({
+    queryKey: ["/api/mastery"],
+    enabled: !!user,
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+
+  const { data: recovery = {} } = useQuery<Record<string, number>>({
+    queryKey: ["/api/recovery"],
     enabled: !!user,
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
@@ -405,6 +423,47 @@ export default function Home() {
                 {workout.timeBlockHint && (
                   <p className="text-[11px] text-muted-foreground mb-3 leading-snug">{workout.timeBlockHint}</p>
                 )}
+
+                {/* PR Opportunities */}
+                {personalRecords && workout && (() => {
+                  const prMap = new Map(personalRecords.map((pr: any) => [pr.exerciseName, pr]));
+                  const prOpportunities = workout.rounds.filter((round: any) => {
+                    const pr = prMap.get(round.exerciseName);
+                    if (!pr) return true; // No PR exists, any performance is opportunity
+                    const currentPR = round.isHold ? pr.bestSeconds : pr.bestReps;
+                    if (currentPR === null) return true;
+                    const target = round.reps || 1;
+                    return target >= (currentPR * 0.9); // Within 10% of PR
+                  }).slice(0, 3);
+                  
+                  return prOpportunities.length > 0 ? (
+                    <div className="mb-3 p-2 bg-primary/10 border border-primary/20 rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Trophy className="w-3 h-3 text-primary" />
+                        <p className="text-[10px] uppercase font-bold text-primary tracking-wider">PR Opportunities</p>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        {prOpportunities.length} exercise{prOpportunities.length > 1 ? 's' : ''} close to personal records
+                      </p>
+                    </div>
+                  ) : null;
+                })()}
+
+                {/* Recovery Hints */}
+                {recovery && Object.keys(recovery).length > 0 && (() => {
+                  const lowRecovery = Object.entries(recovery).filter(([_, score]) => score < 0.5).slice(0, 2);
+                  return lowRecovery.length > 0 ? (
+                    <div className="mb-3 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Activity className="w-3 h-3 text-amber-400" />
+                        <p className="text-[10px] uppercase font-bold text-amber-400 tracking-wider">Recovery Note</p>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Some muscle groups may need more rest
+                      </p>
+                    </div>
+                  ) : null;
+                })()}
 
                 <Link href="/workout">
                   <Button className="w-full bg-primary text-black hover:bg-primary/90 font-bold uppercase tracking-wider" data-testid="button-start-workout">

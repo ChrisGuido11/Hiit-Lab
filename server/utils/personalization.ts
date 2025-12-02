@@ -25,6 +25,9 @@ export interface PersonalizationInsights {
     optimalTimeBlock: TimeBlock | null;
     performanceByBlock: TimeBlockPerformanceMap;
   };
+  recoveryScores?: Map<string, number>; // muscleGroup -> recovery score (0-1)
+  masteryScores?: Map<string, number>; // exerciseName -> mastery score (0-100)
+  weeklyVolume?: Record<string, { volume: number; sessions: number }>; // muscleGroup -> volume data
 }
 
 export function categorizeTimeBlock(date: Date): TimeBlock {
@@ -115,6 +118,9 @@ export function buildPersonalizationInsights(
   sessions: Array<WorkoutSession & { rounds: WorkoutRound[] }>,
   windowSize = 8,
   exerciseStats?: ExerciseStat[],
+  recoveryScores?: Map<string, number>,
+  masteryScores?: Map<string, number>,
+  weeklyVolume?: Record<string, { volume: number; sessions: number }>,
 ): PersonalizationInsights {
   const recent = sessions.slice(0, windowSize);
 
@@ -220,6 +226,9 @@ export function buildPersonalizationInsights(
       optimalTimeBlock,
       performanceByBlock,
     },
+    recoveryScores,
+    masteryScores,
+    weeklyVolume,
   };
 }
 
