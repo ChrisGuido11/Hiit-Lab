@@ -48,7 +48,7 @@ export default function WorkoutComplete() {
   }, [queryClient, workout]);
 
   const saveWorkoutMutation = useMutation({
-    mutationFn: async ({ rpe, notes: sessionNotes }: { rpe: number; notes?: string }) => {
+    mutationFn: async ({ rpe, notes }: { rpe: number; notes?: string }) => {
       if (!workout) throw new Error("No workout data");
 
       const payloadRounds = workout.rounds.map((round) => {
@@ -71,7 +71,7 @@ export default function WorkoutComplete() {
           focusLabel: workout.focusLabel,
           perceivedExertion: rpe,
           rounds: payloadRounds,
-          notes: sessionNotes,
+          notes,
         }),
         credentials: "include",
       });
