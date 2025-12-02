@@ -3,6 +3,7 @@ import {
   profiles,
   workoutSessions,
   workoutRounds,
+  exerciseStats,
   type User,
   type UpsertUser,
   type Profile,
@@ -11,9 +12,11 @@ import {
   type InsertWorkoutSession,
   type WorkoutRound,
   type InsertWorkoutRound,
+  type ExerciseStat,
+  type InsertExerciseStat,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import type { EquipmentId } from "@shared/equipment";
 
 type ProfileInsert = typeof profiles.$inferInsert;
@@ -36,6 +39,10 @@ export interface IStorage {
 
   // Workout rounds operations
   createWorkoutRounds(rounds: InsertWorkoutRound[]): Promise<WorkoutRound[]>;
+
+  // Exercise performance stats
+  upsertExerciseStats(userId: string, stats: Array<Omit<InsertExerciseStat, "userId" | "id">>): Promise<ExerciseStat[]>;
+  getExerciseStats(userId: string): Promise<ExerciseStat[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -142,6 +149,39 @@ export class DatabaseStorage implements IStorage {
   async createWorkoutRounds(roundsData: InsertWorkoutRound[]): Promise<WorkoutRound[]> {
     const rounds = await db.insert(workoutRounds).values(roundsData).returning();
     return rounds;
+  }
+
+  async upsertExerciseStats(
+    userId: string,
+    stats: Array<Omit<InsertExerciseStat, "userId" | "id">>,
+  ): Promise<ExerciseStat[]> {
+    if (!stats.length) return [];
+
+    const rows = stats.map((stat) => ({
+      ...stat,
+      userId,
+    }));
+
+    const result = await db
+      .insert(exerciseStats)
+      .values(rows)
+      .onConflictDoUpdate({
+        target: [exerciseStats.userId, exerciseStats.exerciseName],
+        set: {
+          acceptCount: sql`${exerciseStats.acceptCount} + excluded.accept_count`,
+          skipCount: sql`${exerciseStats.skipCount} + excluded.skip_count`,
+          completionCount: sql`${exerciseStats.completionCount} + excluded.completion_count`,
+          qualitySum: sql`${exerciseStats.qualitySum} + excluded.quality_sum`,
+          lastPerformedAt: sql`greatest(${exerciseStats.lastPerformedAt}, excluded.last_performed_at)`,
+        },
+      })
+      .returning();
+
+    return result;
+  }
+
+  async getExerciseStats(userId: string): Promise<ExerciseStat[]> {
+    return db.select().from(exerciseStats).where(eq(exerciseStats.userId, userId));
   }
 }
 

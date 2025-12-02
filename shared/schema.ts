@@ -17,6 +17,8 @@ import {
   uuid,
   boolean,
   text,
+  doublePrecision,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -168,6 +170,25 @@ export const insertWorkoutRoundSchema = createInsertSchema(workoutRounds).omit({
 
 export type InsertWorkoutRound = z.infer<typeof insertWorkoutRoundSchema>;
 export type WorkoutRound = typeof workoutRounds.$inferSelect;
+
+// Exercise-level performance stats
+export const exerciseStats = pgTable(
+  "exercise_stats",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+    exerciseName: text("exercise_name").notNull(),
+    acceptCount: integer("accept_count").default(0).notNull(),
+    skipCount: integer("skip_count").default(0).notNull(),
+    completionCount: integer("completion_count").default(0).notNull(),
+    qualitySum: doublePrecision("quality_sum").default(0).notNull(),
+    lastPerformedAt: timestamp("last_performed_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("exercise_stats_user_exercise_idx").on(table.userId, table.exerciseName)]
+);
+
+export type ExerciseStat = typeof exerciseStats.$inferSelect;
+export type InsertExerciseStat = typeof exerciseStats.$inferInsert;
 
 // Generated workout type (returned by AI workout generators)
 export interface GeneratedWorkout {
