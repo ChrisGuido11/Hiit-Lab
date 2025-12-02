@@ -12,6 +12,7 @@ import {
 import { pickFrameworkForGoal } from "@shared/goals";
 import {
   insertProfileSchema,
+  type InsertProfile,
   insertWorkoutSessionSchema,
   workoutGenerationRequestSchema,
 } from "@shared/schema";
@@ -20,6 +21,8 @@ import { workoutRoundsArraySchema } from "./utils/roundValidation";
 import {
   aggregateExerciseOutcomes,
   buildPersonalizationInsights,
+  categorizeTimeBlock,
+  computeTimeBlockPerformance,
   summarizeSessionPerformance,
 } from "./utils/personalization";
 
@@ -136,6 +139,12 @@ export async function registerRoutes(
         intentNote: requestIntent.intentNote,
       };
 
+      const currentTimeBlock = categorizeTimeBlock(new Date());
+      const recommendedTimeBlock =
+        profile.optimalTimeBlock ?? personalization.timeBlockBias?.optimalTimeBlock ?? currentTimeBlock;
+      const recommendedPerformance =
+        recommendedTimeBlock && personalization.timeBlockBias?.performanceByBlock?.[recommendedTimeBlock];
+
       let selectedFramework: string;
       if (frameworkOverride && ['EMOM', 'Tabata', 'AMRAP', 'Circuit'].includes(frameworkOverride)) {
         // User explicitly chose a framework (from Workout Lab)
@@ -186,6 +195,10 @@ export async function registerRoutes(
         ? `Framework pinned to ${frameworkOverride} from user selection.`
         : `AI selected ${selectedFramework.toUpperCase()} based on goals and intent.`;
 
+      const timeBlockHint = recommendedPerformance?.sampleSize
+        ? `Best results in the ${recommendedTimeBlock} block (${(recommendedPerformance.averageHitRate * 100).toFixed(0)}% hit-rate, Δ ${(recommendedPerformance.deltaHitRate * 100).toFixed(1)} vs avg over ${recommendedPerformance.sampleSize} sessions).`
+        : `Biasing toward your ${recommendedTimeBlock} window for better adherence.`;
+
       workout.rationale = {
         framework: `${frameworkReason} ${workout.rationale?.framework ?? ""}`.trim(),
         intensity:
@@ -194,7 +207,14 @@ export async function registerRoutes(
         exerciseSelection:
           workout.rationale?.exerciseSelection ??
           `Exercises filtered for available equipment and tuned toward ${sessionIntent.focusToday ?? profile.goalFocus ?? "general"} focus.`,
+        schedule:
+          recommendedTimeBlock === currentTimeBlock
+            ? `Sticking with your ${recommendedTimeBlock} groove where you perform best.`
+            : `Plan this for the ${recommendedTimeBlock} window to match your best-performing block.`,
       };
+
+      workout.recommendedTimeBlock = recommendedTimeBlock;
+      workout.timeBlockHint = timeBlockHint;
 
       res.json(workout);
     } catch (error) {
@@ -207,6 +227,7 @@ export async function registerRoutes(
   app.post('/api/workout/session', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      const timeBlock = categorizeTimeBlock(new Date());
 
       // Extract session data and rounds from request
       const { rounds, perceivedExertion, notes, ...sessionData } = req.body;
@@ -224,6 +245,7 @@ export async function registerRoutes(
         perceivedExertion,
         notes,
         completed: true,
+        timeBlock,
       });
 
       const parsedRounds = workoutRoundsArraySchema.safeParse(rounds);
@@ -263,12 +285,19 @@ export async function registerRoutes(
       );
       await storage.upsertExerciseStats(userId, exerciseSummaries);
       
-      // Update skill score based on RPE
-      if (perceivedExertion || roundsData.length) {
-        const profile = await storage.getProfile(userId);
-        if (profile) {
+      const profile = await storage.getProfile(userId);
+      const history = await storage.getWorkoutSessions(userId);
+
+      if (profile) {
+        const profileUpdates: Partial<InsertProfile> = {};
+
+        const { performanceByBlock, optimalTimeBlock } = computeTimeBlockPerformance(history);
+        profileUpdates.timeBlockPerformance = performanceByBlock as InsertProfile["timeBlockPerformance"];
+        profileUpdates.optimalTimeBlock = optimalTimeBlock as InsertProfile["optimalTimeBlock"];
+
+        // Update skill score based on RPE
+        if (perceivedExertion || roundsData.length) {
           const sessionPerformance = summarizeSessionPerformance(roundsData as any, perceivedExertion);
-          const history = await storage.getWorkoutSessions(userId);
           const performanceHistory = history.map((previousSession) =>
             summarizeSessionPerformance(previousSession.rounds as any, previousSession.perceivedExertion)
           );
@@ -276,10 +305,14 @@ export async function registerRoutes(
             performanceHistory[0] = sessionPerformance; // ensure freshest data for the newest session
           }
           const newSkillScore = updateSkillScore(profile.skillScore, performanceHistory);
-          await storage.updateProfile(userId, { skillScore: newSkillScore });
+          profileUpdates.skillScore = newSkillScore;
+        }
+
+        if (Object.keys(profileUpdates).length) {
+          await storage.updateProfile(userId, profileUpdates);
         }
       }
-      
+
       res.status(201).json(session);
     } catch (error) {
       if (error instanceof z.ZodError) {

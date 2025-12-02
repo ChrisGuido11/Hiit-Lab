@@ -84,6 +84,8 @@ export class DatabaseStorage implements IStorage {
       primaryGoal: profileData.primaryGoal as ProfileInsert["primaryGoal"],
       secondaryGoals: profileData.secondaryGoals as ProfileInsert["secondaryGoals"],
       goalWeights: profileData.goalWeights as ProfileInsert["goalWeights"],
+      optimalTimeBlock: profileData.optimalTimeBlock as ProfileInsert["optimalTimeBlock"],
+      timeBlockPerformance: profileData.timeBlockPerformance as ProfileInsert["timeBlockPerformance"],
     };
 
     const [profile] = await db
@@ -100,6 +102,8 @@ export class DatabaseStorage implements IStorage {
       primaryGoal: updates.primaryGoal as ProfileInsert["primaryGoal"],
       secondaryGoals: updates.secondaryGoals as ProfileInsert["secondaryGoals"],
       goalWeights: updates.goalWeights as ProfileInsert["goalWeights"],
+      optimalTimeBlock: updates.optimalTimeBlock as ProfileInsert["optimalTimeBlock"],
+      timeBlockPerformance: updates.timeBlockPerformance as ProfileInsert["timeBlockPerformance"],
     };
     const [profile] = await db
       .update(profiles)

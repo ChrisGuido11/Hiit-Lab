@@ -25,6 +25,17 @@ import { z } from "zod";
 import type { EquipmentId } from "./equipment";
 import type { PrimaryGoalId } from "./goals";
 
+export const timeBlocks = ["morning", "afternoon", "evening"] as const;
+export type TimeBlock = typeof timeBlocks[number];
+export type TimeBlockPerformance = {
+  sampleSize: number;
+  averageHitRate: number;
+  skipRate: number;
+  averageRpe: number | null;
+  deltaHitRate: number;
+};
+export type TimeBlockPerformanceMap = Record<TimeBlock, TimeBlockPerformance>;
+
 export const sessionIntentSchema = z.object({
   focusToday: z
     .string()
@@ -78,6 +89,8 @@ export const profiles = pgTable("profiles", {
   secondaryGoals: jsonb("secondary_goals").$type<PrimaryGoalId[]>(), // New: Optional secondary goals
   goalWeights: jsonb("goal_weights").$type<Record<PrimaryGoalId, number>>(), // New: AI-facing goal weights
   skillScore: integer("skill_score").default(50).notNull(), // 0-100
+  optimalTimeBlock: text("optimal_time_block").$type<TimeBlock>(),
+  timeBlockPerformance: jsonb("time_block_performance").$type<TimeBlockPerformanceMap>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -118,6 +131,7 @@ export const workoutSessions = pgTable("workout_sessions", {
   perceivedExertion: integer("perceived_exertion"), // 1-5 RPE
   notes: text("notes"),
   completed: boolean("completed").default(false).notNull(),
+  timeBlock: text("time_block").notNull().default("morning").$type<TimeBlock>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -136,6 +150,7 @@ export const insertWorkoutSessionSchema = createInsertSchema(workoutSessions)
   })
   .extend({
     framework: z.enum(workoutFrameworks),
+    timeBlock: z.enum(timeBlocks),
   });
 
 export type InsertWorkoutSession = z.infer<typeof insertWorkoutSessionSchema>;
@@ -196,6 +211,8 @@ export interface GeneratedWorkout {
   durationMinutes: number;
   difficultyTag: "beginner" | "intermediate" | "advanced";
   focusLabel: string;
+  recommendedTimeBlock?: TimeBlock;
+  timeBlockHint?: string;
   rounds: Array<{
     minuteIndex: number;
     exerciseName: string;
@@ -218,5 +235,6 @@ export interface GeneratedWorkout {
     framework: string;
     intensity: string;
     exerciseSelection: string;
+    schedule?: string;
   };
 }

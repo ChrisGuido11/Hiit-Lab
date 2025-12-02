@@ -8,7 +8,12 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
-import type { GeneratedWorkout, Profile as ProfileModel, WorkoutSession } from "@/../../shared/schema";
+import type {
+  GeneratedWorkout,
+  Profile as ProfileModel,
+  TimeBlock,
+  WorkoutSession,
+} from "@/../../shared/schema";
 import { getQueryFn } from "@/lib/queryClient";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis } from "recharts";
@@ -18,6 +23,18 @@ function getTimeGreeting(): string {
   if (hour < 12) return "Good Morning";
   if (hour < 18) return "Good Afternoon";
   return "Good Evening";
+}
+
+function getCurrentTimeBlock(): TimeBlock {
+  const hour = new Date().getHours();
+  if (hour < 12) return "morning";
+  if (hour < 18) return "afternoon";
+  return "evening";
+}
+
+function formatTimeBlockLabel(block?: TimeBlock | null): string {
+  if (!block) return "";
+  return block.charAt(0).toUpperCase() + block.slice(1);
 }
 
 export default function Home() {
@@ -62,6 +79,13 @@ export default function Home() {
   const sortedHistory = [...historyData].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
+
+  const currentTimeBlock = getCurrentTimeBlock();
+  const optimalTimeBlock = profile?.optimalTimeBlock;
+  const timeBlockPerformance = profile?.timeBlockPerformance;
+  const optimalBlockPerformance =
+    optimalTimeBlock && timeBlockPerformance ? timeBlockPerformance[optimalTimeBlock] : undefined;
+  const recommendedTimeBlock = workout?.recommendedTimeBlock ?? optimalTimeBlock ?? currentTimeBlock;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -193,11 +217,49 @@ export default function Home() {
           <div>
             <p className="text-muted-foreground font-medium uppercase tracking-wider text-sm">{getTimeGreeting()}</p>
             <h1 className="text-4xl font-bold text-white leading-none mt-1">
-              READY TO <br/> 
+              READY TO <br/>
               <span className="text-primary neon-text">SWEAT?</span>
             </h1>
           </div>
         </div>
+
+        {recommendedTimeBlock && (
+          <Card className="p-4 bg-card/60 border-border/60">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-full bg-primary/10 border border-primary/30 text-primary">
+                  <Clock size={18} />
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-bold">Optimal window</p>
+                  <p className="text-lg font-display font-bold text-white capitalize leading-none">
+                    {formatTimeBlockLabel(recommendedTimeBlock)}
+                  </p>
+                  {workout?.timeBlockHint ? (
+                    <p className="text-[11px] text-muted-foreground mt-1 leading-snug">{workout.timeBlockHint}</p>
+                  ) : optimalBlockPerformance ? (
+                    <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                      {optimalBlockPerformance.sampleSize} session sample •
+                      {` ${(optimalBlockPerformance.averageHitRate * 100).toFixed(0)}% hit-rate`}
+                      {optimalBlockPerformance.deltaHitRate
+                        ? ` (${(optimalBlockPerformance.deltaHitRate * 100).toFixed(1)}% vs avg)`
+                        : ""}
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                      Biasing suggestions toward the block where you stick best.
+                    </p>
+                  )}
+                </div>
+              </div>
+              {recommendedTimeBlock !== currentTimeBlock && (
+                <div className="text-[11px] text-primary bg-primary/10 border border-primary/30 rounded-full px-3 py-1 font-semibold uppercase tracking-wider">
+                  Next up
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
 
         {/* Main Action Card - Daily WOD */}
         {workoutLoading ? (
@@ -227,7 +289,14 @@ export default function Home() {
                   <RotateCw size={16} />
                 </Button>
               </div>
-              
+
+              {workout.recommendedTimeBlock && (
+                <div className="text-[12px] text-primary font-semibold uppercase tracking-wider flex items-center gap-2 mt-1">
+                  <Clock size={14} />
+                  {formatTimeBlockLabel(workout.recommendedTimeBlock)} focus
+                </div>
+              )}
+
               <div>
                 <h2 className="text-3xl font-bold text-white mb-1 uppercase">
                   {workout.focusLabel}
@@ -238,7 +307,11 @@ export default function Home() {
                 <p className="text-gray-300 text-sm mb-4">
                   {workout.durationMinutes} Min • {workout.rounds.length} Exercises • {workout.difficultyTag}
                 </p>
-                
+
+                {workout.timeBlockHint && (
+                  <p className="text-[11px] text-muted-foreground mb-3 leading-snug">{workout.timeBlockHint}</p>
+                )}
+
                 <Link href="/workout">
                   <Button className="w-full bg-primary text-black hover:bg-primary/90 font-bold uppercase tracking-wider" data-testid="button-start-workout">
                     <Play className="w-4 h-4 mr-2 fill-current" /> Start Workout

@@ -1,4 +1,10 @@
-import type { ExerciseStat, WorkoutRound, WorkoutSession } from "@shared/schema";
+import type {
+  ExerciseStat,
+  TimeBlock,
+  TimeBlockPerformanceMap,
+  WorkoutRound,
+  WorkoutSession,
+} from "@shared/schema";
 
 export interface ExerciseScore {
   acceptRate: number;
@@ -15,6 +21,87 @@ export interface PersonalizationInsights {
   fatigueTrend: number;
   exercisePreference: Record<string, number>;
   exerciseScores: Record<string, ExerciseScore>;
+  timeBlockBias?: {
+    optimalTimeBlock: TimeBlock | null;
+    performanceByBlock: TimeBlockPerformanceMap;
+  };
+}
+
+export function categorizeTimeBlock(date: Date): TimeBlock {
+  const hour = date.getHours();
+  if (hour < 12) return "morning";
+  if (hour < 18) return "afternoon";
+  return "evening";
+}
+
+export function computeTimeBlockPerformance(
+  sessions: Array<WorkoutSession & { rounds: WorkoutRound[] }>,
+): { performanceByBlock: TimeBlockPerformanceMap; optimalTimeBlock: TimeBlock | null } {
+  const performanceByBlock: TimeBlockPerformanceMap = {
+    morning: { sampleSize: 0, averageHitRate: 1, skipRate: 0, averageRpe: null, deltaHitRate: 0 },
+    afternoon: { sampleSize: 0, averageHitRate: 1, skipRate: 0, averageRpe: null, deltaHitRate: 0 },
+    evening: { sampleSize: 0, averageHitRate: 1, skipRate: 0, averageRpe: null, deltaHitRate: 0 },
+  };
+
+  const blockAggregates: Record<TimeBlock, { hitRateSum: number; skipRateSum: number; rpeSum: number; rpeCount: number; sampleSize: number }> = {
+    morning: { hitRateSum: 0, skipRateSum: 0, rpeSum: 0, rpeCount: 0, sampleSize: 0 },
+    afternoon: { hitRateSum: 0, skipRateSum: 0, rpeSum: 0, rpeCount: 0, sampleSize: 0 },
+    evening: { hitRateSum: 0, skipRateSum: 0, rpeSum: 0, rpeCount: 0, sampleSize: 0 },
+  };
+
+  let globalHitRateSum = 0;
+  let globalSampleSize = 0;
+
+  for (const session of sessions) {
+    const block = categorizeTimeBlock(new Date(session.createdAt));
+    const summary = summarizeSessionPerformance(session.rounds, session.perceivedExertion);
+    const aggregates = blockAggregates[block];
+
+    aggregates.hitRateSum += summary.averageHitRate;
+    aggregates.skipRateSum += summary.skipRate;
+    aggregates.sampleSize += 1;
+    if (typeof summary.averageRpe === "number") {
+      aggregates.rpeSum += summary.averageRpe;
+      aggregates.rpeCount += 1;
+    }
+
+    globalHitRateSum += summary.averageHitRate;
+    globalSampleSize += 1;
+  }
+
+  const globalAverageHitRate = globalSampleSize ? globalHitRateSum / globalSampleSize : 1;
+
+  for (const block of Object.keys(blockAggregates) as TimeBlock[]) {
+    const aggregates = blockAggregates[block];
+    if (!aggregates.sampleSize) continue;
+
+    const averageHitRate = aggregates.hitRateSum / aggregates.sampleSize;
+    const skipRate = aggregates.skipRateSum / aggregates.sampleSize;
+    const averageRpe = aggregates.rpeCount ? aggregates.rpeSum / aggregates.rpeCount : null;
+
+    performanceByBlock[block] = {
+      sampleSize: aggregates.sampleSize,
+      averageHitRate,
+      skipRate,
+      averageRpe,
+      deltaHitRate: averageHitRate - globalAverageHitRate,
+    };
+  }
+
+  let optimalTimeBlock: TimeBlock | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const block of Object.keys(performanceByBlock) as TimeBlock[]) {
+    const perf = performanceByBlock[block];
+    if (!perf.sampleSize) continue;
+    const score = perf.averageHitRate - perf.skipRate;
+    if (score > bestScore) {
+      bestScore = score;
+      optimalTimeBlock = block;
+    }
+  }
+
+  return { performanceByBlock, optimalTimeBlock };
 }
 
 export interface SessionPerformanceSummary {
@@ -30,6 +117,8 @@ export function buildPersonalizationInsights(
   exerciseStats?: ExerciseStat[],
 ): PersonalizationInsights {
   const recent = sessions.slice(0, windowSize);
+
+  const { performanceByBlock, optimalTimeBlock } = computeTimeBlockPerformance(recent);
 
   let hitSum = 0;
   let hitCount = 0;
@@ -127,6 +216,10 @@ export function buildPersonalizationInsights(
     fatigueTrend,
     exercisePreference,
     exerciseScores,
+    timeBlockBias: {
+      optimalTimeBlock,
+      performanceByBlock,
+    },
   };
 }
 
