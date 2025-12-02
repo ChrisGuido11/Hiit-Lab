@@ -24,6 +24,15 @@ export interface SessionPerformanceSummary {
   movementPerformance: Record<string, { hitRate: number; skipRate: number; averageRpe: number | null }>;
 }
 
+export interface FrameworkOutcomeScore {
+  successScore: number;
+  completionRate: number;
+  hitRate: number;
+  skipRate: number;
+  completedRounds: number;
+  totalRounds: number;
+}
+
 export function buildPersonalizationInsights(
   sessions: Array<WorkoutSession & { rounds: WorkoutRound[] }>,
   windowSize = 8,
@@ -188,6 +197,27 @@ export function summarizeSessionPerformance(
         { ...perf, averageRpe: rpeValue },
       ])
     ),
+  };
+}
+
+export function scoreFrameworkOutcome(
+  performance: SessionPerformanceSummary,
+  totalRounds: number,
+  perceivedExertion?: number | null,
+): FrameworkOutcomeScore {
+  const completionRate = Math.max(0, 1 - performance.skipRate);
+  const rpePenalty = typeof perceivedExertion === "number"
+    ? Math.max(0.75, 1 - Math.max(0, perceivedExertion - 3) * 0.08)
+    : 1;
+  const weightedScore = ((performance.averageHitRate || 1) * 0.6 + completionRate * 0.4) * rpePenalty;
+
+  return {
+    successScore: Math.min(1.6, Math.max(0.6, weightedScore)),
+    completionRate,
+    hitRate: performance.averageHitRate,
+    skipRate: performance.skipRate,
+    completedRounds: Math.round(totalRounds * completionRate),
+    totalRounds,
   };
 }
 

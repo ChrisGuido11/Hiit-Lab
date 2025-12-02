@@ -14,12 +14,15 @@ import {
   insertProfileSchema,
   insertWorkoutSessionSchema,
   workoutGenerationRequestSchema,
+  DEFAULT_FRAMEWORK_PREFERENCES,
+  type WorkoutFramework,
 } from "@shared/schema";
 import { z } from "zod";
 import { workoutRoundsArraySchema } from "./utils/roundValidation";
 import {
   aggregateExerciseOutcomes,
   buildPersonalizationInsights,
+  scoreFrameworkOutcome,
   summarizeSessionPerformance,
 } from "./utils/personalization";
 
@@ -123,6 +126,7 @@ export async function registerRoutes(
 
       const history = await storage.getWorkoutSessions(userId);
       const exerciseStats = await storage.getExerciseStats(userId);
+      const frameworkPerformance = await storage.getFrameworkStats(userId);
       const personalization = buildPersonalizationInsights(history, 8, exerciseStats);
 
       const requestIntent = workoutGenerationRequestSchema.parse(req.query);
@@ -136,15 +140,19 @@ export async function registerRoutes(
         intentNote: requestIntent.intentNote,
       };
 
-      let selectedFramework: string;
-      if (frameworkOverride && ['EMOM', 'Tabata', 'AMRAP', 'Circuit'].includes(frameworkOverride)) {
-        // User explicitly chose a framework (from Workout Lab)
-        selectedFramework = frameworkOverride.toLowerCase();
-      } else {
-        // Use AI goal-based selection (Daily WOD)
-        selectedFramework = pickFrameworkForGoal(profile.primaryGoal ?? null);
+      const frameworkPreferences = profile.frameworkPreferences ?? DEFAULT_FRAMEWORK_PREFERENCES;
 
-        // Allow intent to gently steer the framework choice when no override is present
+      const selection = pickFrameworkForGoal(profile.primaryGoal ?? null, {
+        success: frameworkPerformance,
+        preferences: frameworkPreferences,
+      });
+
+      let selectedFramework =
+        frameworkOverride && ['EMOM', 'Tabata', 'AMRAP', 'Circuit'].includes(frameworkOverride)
+          ? frameworkOverride.toLowerCase()
+          : selection.framework;
+
+      if (!frameworkOverride) {
         if (sessionIntent.energyLevel === "low" && selectedFramework === "tabata") {
           selectedFramework = "circuit";
         }
@@ -152,6 +160,19 @@ export async function registerRoutes(
           selectedFramework = "circuit";
         }
       }
+
+      const selectionWeights = Object.fromEntries(
+        Object.entries(selection.weights).map(([key, weight]) => [key.toUpperCase(), weight])
+      ) as Record<WorkoutFramework, number>;
+
+      const selectionMeta = {
+        source: frameworkOverride ? "user-choice" : "ai-bias",
+        rationale: frameworkOverride
+          ? `Framework pinned to ${frameworkOverride} from user selection.`
+          : selection.rationale,
+        weights: selectionWeights,
+        variety: frameworkPreferences.variety ?? DEFAULT_FRAMEWORK_PREFERENCES.variety,
+      };
 
       // Generate workout using appropriate framework generator
       let workout;
@@ -196,6 +217,8 @@ export async function registerRoutes(
           `Exercises filtered for available equipment and tuned toward ${sessionIntent.focusToday ?? profile.goalFocus ?? "general"} focus.`,
       };
 
+      workout.frameworkSelection = selectionMeta;
+
       res.json(workout);
     } catch (error) {
       console.error("Error generating workout:", error);
@@ -209,7 +232,17 @@ export async function registerRoutes(
       const userId = req.user.claims.sub;
 
       // Extract session data and rounds from request
-      const { rounds, perceivedExertion, notes, ...sessionData } = req.body;
+      const {
+        rounds,
+        perceivedExertion,
+        notes,
+        frameworkSource,
+        frameworkReason,
+        frameworkWeights,
+        frameworkSelection,
+        intent,
+        ...sessionData
+      } = req.body;
 
       if (!Array.isArray(rounds)) {
         return res
@@ -232,8 +265,28 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid rounds data", errors: parsedRounds.error.errors });
       }
       
-      // Create workout session
-      const session = await storage.createWorkoutSession(validatedSession);
+      const sessionPerformance = summarizeSessionPerformance(parsedRounds.data as any, perceivedExertion);
+      const frameworkOutcome = scoreFrameworkOutcome(
+        sessionPerformance,
+        parsedRounds.data.length,
+        perceivedExertion,
+      );
+
+      const session = await storage.createWorkoutSession({
+        ...validatedSession,
+        frameworkSource: frameworkSource ?? frameworkSelection?.source ?? "ai-bias",
+        frameworkReason:
+          frameworkReason ?? frameworkSelection?.rationale ?? sessionData.frameworkReason ?? null,
+        frameworkWeights: frameworkWeights ?? frameworkSelection?.weights,
+        intentFocus: intent?.focusToday ?? null,
+        intentEnergy: intent?.energyLevel ?? null,
+        intentNote: intent?.intentNote ?? null,
+        totalRounds: frameworkOutcome.totalRounds,
+        completedRounds: frameworkOutcome.completedRounds,
+        hitRate: frameworkOutcome.hitRate,
+        skipRate: frameworkOutcome.skipRate,
+        formatSuccessScore: frameworkOutcome.successScore,
+      });
 
       // Create workout rounds
       const roundsData = parsedRounds.data.map((round) => ({
@@ -249,7 +302,7 @@ export async function registerRoutes(
         actualSeconds: round.actualSeconds ?? null,
         skipped: Boolean(round.skipped),
       }));
-      
+
       await storage.createWorkoutRounds(roundsData);
 
       // Update exercise-level stats for personalization
@@ -262,12 +315,20 @@ export async function registerRoutes(
         >,
       );
       await storage.upsertExerciseStats(userId, exerciseSummaries);
-      
+
+      await storage.upsertFrameworkStat(userId, session.framework, {
+        successScore: frameworkOutcome.successScore,
+        completionRate: frameworkOutcome.completionRate,
+        hitRate: frameworkOutcome.hitRate,
+        skipRate: frameworkOutcome.skipRate,
+        perceivedExertion,
+        totalRounds: frameworkOutcome.totalRounds,
+      });
+
       // Update skill score based on RPE
       if (perceivedExertion || roundsData.length) {
         const profile = await storage.getProfile(userId);
         if (profile) {
-          const sessionPerformance = summarizeSessionPerformance(roundsData as any, perceivedExertion);
           const history = await storage.getWorkoutSessions(userId);
           const performanceHistory = history.map((previousSession) =>
             summarizeSessionPerformance(previousSession.rounds as any, previousSession.perceivedExertion)

@@ -25,6 +25,15 @@ import { z } from "zod";
 import type { EquipmentId } from "./equipment";
 import type { PrimaryGoalId } from "./goals";
 
+export interface FrameworkPreferenceSettings {
+  variety: number; // 0 = stick with winners, 1 = maximum variety
+  manualWeights?: Partial<Record<WorkoutFramework, number>>;
+}
+
+export const DEFAULT_FRAMEWORK_PREFERENCES: FrameworkPreferenceSettings = {
+  variety: 0.25,
+};
+
 export const sessionIntentSchema = z.object({
   focusToday: z
     .string()
@@ -77,6 +86,9 @@ export const profiles = pgTable("profiles", {
   primaryGoal: text("primary_goal").$type<PrimaryGoalId>(), // New: Primary training goal
   secondaryGoals: jsonb("secondary_goals").$type<PrimaryGoalId[]>(), // New: Optional secondary goals
   goalWeights: jsonb("goal_weights").$type<Record<PrimaryGoalId, number>>(), // New: AI-facing goal weights
+  frameworkPreferences: jsonb("framework_preferences")
+    .default(sql`'{"variety":0.25}'::jsonb`)
+    .$type<FrameworkPreferenceSettings>(),
   skillScore: integer("skill_score").default(50).notNull(), // 0-100
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -115,6 +127,17 @@ export const workoutSessions = pgTable("workout_sessions", {
   durationMinutes: integer("duration_minutes").notNull(),
   difficultyTag: text("difficulty_tag").notNull(), // "beginner", "intermediate", "advanced"
   focusLabel: text("focus_label").notNull(), // "cardio", "strength", "metcon"
+  frameworkSource: text("framework_source"), // user-choice | ai-bias
+  frameworkReason: text("framework_reason"),
+  frameworkWeights: jsonb("framework_weights").$type<Record<WorkoutFramework, number>>(),
+  intentFocus: text("intent_focus"),
+  intentEnergy: text("intent_energy"),
+  intentNote: text("intent_note"),
+  totalRounds: integer("total_rounds").default(0).notNull(),
+  completedRounds: integer("completed_rounds").default(0).notNull(),
+  hitRate: doublePrecision("hit_rate").default(1).notNull(),
+  skipRate: doublePrecision("skip_rate").default(0).notNull(),
+  formatSuccessScore: doublePrecision("format_success_score").default(1).notNull(),
   perceivedExertion: integer("perceived_exertion"), // 1-5 RPE
   notes: text("notes"),
   completed: boolean("completed").default(false).notNull(),
@@ -190,6 +213,47 @@ export const exerciseStats = pgTable(
 export type ExerciseStat = typeof exerciseStats.$inferSelect;
 export type InsertExerciseStat = typeof exerciseStats.$inferInsert;
 
+// Framework-level performance stats
+export const frameworkStats = pgTable(
+  "framework_stats",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+    framework: text("framework").notNull().$type<WorkoutFramework>(),
+    sessionCount: integer("session_count").default(0).notNull(),
+    successSum: doublePrecision("success_sum").default(0).notNull(),
+    completionSum: doublePrecision("completion_sum").default(0).notNull(),
+    hitRateSum: doublePrecision("hit_rate_sum").default(0).notNull(),
+    skipRateSum: doublePrecision("skip_rate_sum").default(0).notNull(),
+    rpeSum: doublePrecision("rpe_sum").default(0).notNull(),
+    rpeCount: integer("rpe_count").default(0).notNull(),
+    totalRounds: integer("total_rounds").default(0).notNull(),
+    lastSuccessScore: doublePrecision("last_success_score").default(0).notNull(),
+    lastSessionAt: timestamp("last_session_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("framework_stats_user_framework_idx").on(table.userId, table.framework)]
+);
+
+export type FrameworkStat = typeof frameworkStats.$inferSelect;
+export type InsertFrameworkStat = typeof frameworkStats.$inferInsert;
+
+export interface FrameworkSuccessSnapshot {
+  framework: WorkoutFramework;
+  successScore: number;
+  completionRate: number;
+  averageHitRate: number;
+  averageSkipRate: number;
+  averageRpe: number | null;
+  sampleSize: number;
+}
+
+export interface FrameworkSelectionMeta {
+  source: string;
+  rationale: string;
+  weights: Record<WorkoutFramework, number>;
+  variety: number;
+}
+
 // Generated workout type (returned by AI workout generators)
 export interface GeneratedWorkout {
   framework: WorkoutFramework;
@@ -219,4 +283,5 @@ export interface GeneratedWorkout {
     intensity: string;
     exerciseSelection: string;
   };
+  frameworkSelection?: FrameworkSelectionMeta;
 }

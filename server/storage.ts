@@ -4,6 +4,7 @@ import {
   workoutSessions,
   workoutRounds,
   exerciseStats,
+  frameworkStats,
   type User,
   type UpsertUser,
   type Profile,
@@ -14,6 +15,10 @@ import {
   type InsertWorkoutRound,
   type ExerciseStat,
   type InsertExerciseStat,
+  type FrameworkStat,
+  type InsertFrameworkStat,
+  type FrameworkSuccessSnapshot,
+  type FrameworkPreferenceSettings,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql } from "drizzle-orm";
@@ -43,6 +48,21 @@ export interface IStorage {
   // Exercise performance stats
   upsertExerciseStats(userId: string, stats: Array<Omit<InsertExerciseStat, "userId" | "id">>): Promise<ExerciseStat[]>;
   getExerciseStats(userId: string): Promise<ExerciseStat[]>;
+
+  // Framework performance stats
+  upsertFrameworkStat(
+    userId: string,
+    framework: WorkoutSession["framework"],
+    stats: {
+      successScore: number;
+      completionRate: number;
+      hitRate: number;
+      skipRate: number;
+      perceivedExertion?: number | null;
+      totalRounds: number;
+    }
+  ): Promise<FrameworkStat>;
+  getFrameworkStats(userId: string): Promise<FrameworkSuccessSnapshot[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -84,6 +104,7 @@ export class DatabaseStorage implements IStorage {
       primaryGoal: profileData.primaryGoal as ProfileInsert["primaryGoal"],
       secondaryGoals: profileData.secondaryGoals as ProfileInsert["secondaryGoals"],
       goalWeights: profileData.goalWeights as ProfileInsert["goalWeights"],
+      frameworkPreferences: profileData.frameworkPreferences as FrameworkPreferenceSettings | undefined,
     };
 
     const [profile] = await db
@@ -100,6 +121,7 @@ export class DatabaseStorage implements IStorage {
       primaryGoal: updates.primaryGoal as ProfileInsert["primaryGoal"],
       secondaryGoals: updates.secondaryGoals as ProfileInsert["secondaryGoals"],
       goalWeights: updates.goalWeights as ProfileInsert["goalWeights"],
+      frameworkPreferences: updates.frameworkPreferences as FrameworkPreferenceSettings | undefined,
     };
     const [profile] = await db
       .update(profiles)
@@ -182,6 +204,74 @@ export class DatabaseStorage implements IStorage {
 
   async getExerciseStats(userId: string): Promise<ExerciseStat[]> {
     return db.select().from(exerciseStats).where(eq(exerciseStats.userId, userId));
+  }
+
+  async upsertFrameworkStat(
+    userId: string,
+    framework: WorkoutSession["framework"],
+    stats: {
+      successScore: number;
+      completionRate: number;
+      hitRate: number;
+      skipRate: number;
+      perceivedExertion?: number | null;
+      totalRounds: number;
+    },
+  ): Promise<FrameworkStat> {
+    const rpeIncrement = typeof stats.perceivedExertion === "number" ? stats.perceivedExertion : 0;
+    const rpeCountIncrement = typeof stats.perceivedExertion === "number" ? 1 : 0;
+
+    const [row] = await db
+      .insert(frameworkStats)
+      .values({
+        userId,
+        framework: framework.toUpperCase() as InsertFrameworkStat["framework"],
+        sessionCount: 1,
+        successSum: stats.successScore,
+        completionSum: stats.completionRate,
+        hitRateSum: stats.hitRate,
+        skipRateSum: stats.skipRate,
+        rpeSum: rpeIncrement,
+        rpeCount: rpeCountIncrement,
+        totalRounds: stats.totalRounds,
+        lastSuccessScore: stats.successScore,
+        lastSessionAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [frameworkStats.userId, frameworkStats.framework],
+        set: {
+          sessionCount: sql`${frameworkStats.sessionCount} + 1`,
+          successSum: sql`${frameworkStats.successSum} + ${stats.successScore}`,
+          completionSum: sql`${frameworkStats.completionSum} + ${stats.completionRate}`,
+          hitRateSum: sql`${frameworkStats.hitRateSum} + ${stats.hitRate}`,
+          skipRateSum: sql`${frameworkStats.skipRateSum} + ${stats.skipRate}`,
+          rpeSum: sql`${frameworkStats.rpeSum} + ${rpeIncrement}`,
+          rpeCount: sql`${frameworkStats.rpeCount} + ${rpeCountIncrement}`,
+          totalRounds: sql`${frameworkStats.totalRounds} + ${stats.totalRounds}`,
+          lastSuccessScore: stats.successScore,
+          lastSessionAt: new Date(),
+        },
+      })
+      .returning();
+
+    return row;
+  }
+
+  async getFrameworkStats(userId: string): Promise<FrameworkSuccessSnapshot[]> {
+    const rows = await db.select().from(frameworkStats).where(eq(frameworkStats.userId, userId));
+
+    return rows.map((row) => {
+      const sampleSize = row.sessionCount || 1;
+      return {
+        framework: row.framework,
+        successScore: row.successSum / sampleSize,
+        completionRate: row.completionSum / sampleSize,
+        averageHitRate: row.hitRateSum / sampleSize,
+        averageSkipRate: row.skipRateSum / sampleSize,
+        averageRpe: row.rpeCount ? row.rpeSum / row.rpeCount : null,
+        sampleSize,
+      } satisfies FrameworkSuccessSnapshot;
+    });
   }
 }
 

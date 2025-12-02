@@ -6,7 +6,7 @@
 // - Added goal viewing and editing with primary/secondary goal support.
 // - Displays user's training goals with visual badges and allows inline editing.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -36,8 +36,14 @@ import { Label } from "@/components/ui/label";
 import { EquipmentSelector } from "@/components/equipment-selector";
 import { getEquipmentLabel, normalizeEquipment, migrateEquipment, type EquipmentId } from "@shared/equipment";
 import { PRIMARY_GOALS, buildGoalWeights, type PrimaryGoalId } from "@shared/goals";
-import type { Profile as ProfileModel, WorkoutRound, WorkoutSession } from "@shared/schema";
+import type {
+  FrameworkPreferenceSettings,
+  Profile as ProfileModel,
+  WorkoutRound,
+  WorkoutSession,
+} from "@shared/schema";
 import { getQueryFn } from "@/lib/queryClient";
+import { Slider } from "@/components/ui/slider";
 
 // Icon mapping for goals
 const GOAL_ICONS = {
@@ -61,6 +67,8 @@ export default function Profile() {
   const [editingPrimaryGoal, setEditingPrimaryGoal] = useState<PrimaryGoalId | null>(null);
   const [editingSecondaryGoals, setEditingSecondaryGoals] = useState<PrimaryGoalId[]>([]);
   const [editingLevel, setEditingLevel] = useState<"Beginner" | "Intermediate" | "Advanced">("Beginner");
+  const [varietyPreference, setVarietyPreference] = useState(0.25);
+  const [isVarietyDirty, setIsVarietyDirty] = useState(false);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -82,11 +90,49 @@ export default function Profile() {
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
+  useEffect(() => {
+    if (profile?.frameworkPreferences) {
+      setVarietyPreference(profile.frameworkPreferences.variety ?? 0.25);
+      setIsVarietyDirty(false);
+    }
+  }, [profile]);
+
   const { data: history = [] } = useQuery<Array<WorkoutSession & { rounds: WorkoutRound[] }>>({
     queryKey: ["/api/workout/history"],
     enabled: !!user,
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
+
+  const formatStats = useMemo(() => {
+    const aggregates: Record<string, { sessions: number; successSum: number; completionSum: number; last: number }>
+      = {};
+
+    history.forEach((session) => {
+      const key = (session.framework || "EMOM").toUpperCase();
+      const completionRate = session.totalRounds
+        ? (session.completedRounds ?? 0) / Math.max(session.totalRounds, 1)
+        : 1 - (session.skipRate ?? 0);
+      const successScore = session.formatSuccessScore ?? 1;
+      const existing = aggregates[key] ?? { sessions: 0, successSum: 0, completionSum: 0, last: 0 };
+
+      existing.sessions += 1;
+      existing.successSum += successScore;
+      existing.completionSum += completionRate;
+      existing.last = Math.max(existing.last, new Date(session.createdAt).getTime());
+
+      aggregates[key] = existing;
+    });
+
+    return Object.entries(aggregates)
+      .map(([framework, data]) => ({
+        framework,
+        sessions: data.sessions,
+        successRate: data.successSum / data.sessions,
+        completionRate: data.completionSum / data.sessions,
+        lastPerformed: data.last ? new Date(data.last) : null,
+      }))
+      .sort((a, b) => b.successRate - a.successRate);
+  }, [history]);
 
   const updateProfileMutation = useMutation({
     mutationFn: async (updates: {
@@ -96,6 +142,7 @@ export default function Profile() {
       goalWeights?: Record<PrimaryGoalId, number>;
       skillScore?: number;
       fitnessLevel?: string;
+      frameworkPreferences?: FrameworkPreferenceSettings;
     }) => {
       const res = await fetch("/api/profile", {
         method: "PATCH",
@@ -112,10 +159,12 @@ export default function Profile() {
       if (variables.equipment) message = "Your equipment preferences have been saved.";
       else if (variables.primaryGoal) message = "Your training goals have been updated.";
       else if (variables.skillScore !== undefined) message = "Your training level has been updated.";
+      else if (variables.frameworkPreferences) message = "Format variety preference saved.";
       toast({ title: "Profile Updated", description: message });
       setIsEditEquipmentOpen(false);
       setIsEditGoalsOpen(false);
       setIsEditLevelOpen(false);
+      setIsVarietyDirty(false);
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -215,6 +264,15 @@ export default function Profile() {
     });
   };
 
+  const handleSaveVarietyPreference = () => {
+    const nextPreferences: FrameworkPreferenceSettings = {
+      ...(profile?.frameworkPreferences ?? { variety: varietyPreference }),
+      variety: varietyPreference,
+    };
+
+    updateProfileMutation.mutate({ frameworkPreferences: nextPreferences });
+  };
+
   const getLevelSkillScore = (level: "Beginner" | "Intermediate" | "Advanced"): number => {
     switch (level) {
       case "Beginner":
@@ -250,11 +308,11 @@ export default function Profile() {
     );
   }
 
-    const totalWorkouts = history.length;
-    const totalMinutes = history.reduce(
-      (sum, session) => sum + (session?.durationMinutes ?? 0),
-      0,
-    );
+  const totalWorkouts = history.length;
+  const totalMinutes = history.reduce(
+    (sum, session) => sum + (session?.durationMinutes ?? 0),
+    0,
+  );
   const currentStreak = 3; // Mock for now
 
   return (
@@ -365,6 +423,74 @@ export default function Profile() {
                 ) : (
                   <p className="text-xs text-muted-foreground italic">No goals set</p>
                 )}
+              </div>
+
+              {/* Format Preferences */}
+              <div className="border-t border-border/50 pt-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <div className="flex flex-col">
+                    <span className="text-muted-foreground">Format Variety</span>
+                    <span className="text-xs text-muted-foreground">Bias toward top-performing formats while keeping variety.</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{Math.round(varietyPreference * 100)}% variety</span>
+                </div>
+                <Slider
+                  value={[Math.round(varietyPreference * 100)]}
+                  step={5}
+                  max={100}
+                  onValueChange={(value) => {
+                    const next = (value?.[0] ?? 0) / 100;
+                    setVarietyPreference(next);
+                    setIsVarietyDirty(true);
+                  }}
+                />
+                <div className="flex justify-between text-[11px] text-muted-foreground">
+                  <span>Stick with winners</span>
+                  <span>More experimentation</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs text-muted-foreground flex-1">
+                    Your best formats stay prioritized; higher variety re-introduces other templates occasionally.
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveVarietyPreference}
+                    disabled={!isVarietyDirty || updateProfileMutation.isPending}
+                  >
+                    {updateProfileMutation.isPending ? "Saving" : "Save"}
+                  </Button>
+                </div>
+
+                <div className="space-y-2">
+                  {formatStats.length ? (
+                    formatStats.map((stat) => (
+                      <div
+                        key={stat.framework}
+                        className="flex items-center justify-between rounded border border-border/40 bg-muted/5 px-3 py-2"
+                      >
+                        <div>
+                          <div className="text-sm font-bold text-white">{stat.framework}</div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {stat.sessions} sessions
+                            {stat.lastPerformed ? ` • ${stat.lastPerformed.toLocaleDateString()}` : ""}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-primary font-bold text-sm">
+                            {Math.round(stat.successRate * 100)}% success
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {Math.round(stat.completionRate * 100)}% completion
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">
+                      Complete a few workouts to see which formats you crush most.
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Equipment Section */}

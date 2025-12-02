@@ -61,6 +61,8 @@ export default function WorkoutComplete() {
         };
       });
 
+      const selection = workout.frameworkSelection;
+
       const res = await fetch("/api/workout/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -72,6 +74,11 @@ export default function WorkoutComplete() {
           perceivedExertion: rpe,
           rounds: payloadRounds,
           notes,
+          frameworkSource: selection?.source,
+          frameworkReason: selection?.rationale ?? workout.rationale?.framework,
+          frameworkWeights: selection?.weights,
+          frameworkSelection: selection,
+          intent: workout.intent,
         }),
         credentials: "include",
       });

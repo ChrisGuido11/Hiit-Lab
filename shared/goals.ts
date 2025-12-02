@@ -12,6 +12,8 @@
  * - Profile management (goal weights, personalization)
  */
 
+import type { FrameworkPreferenceSettings, FrameworkSuccessSnapshot, WorkoutFramework } from './schema';
+
 export type PrimaryGoalId =
   | 'fat_loss'
   | 'muscle_gain'
@@ -22,6 +24,20 @@ export type PrimaryGoalId =
   | 'athletic_performance';
 
 export type IconLibrary = 'activity' | 'dumbbell' | 'flame' | 'target' | 'trending-up' | 'heart' | 'zap';
+
+export interface FrameworkSelectionResult {
+  framework: 'tabata' | 'emom' | 'amrap' | 'circuit';
+  weights: FrameworkBias;
+  rationale: string;
+}
+
+export interface FrameworkSelectionOptions {
+  success?: FrameworkSuccessSnapshot[];
+  preferences?: FrameworkPreferenceSettings | null;
+}
+
+const DEFAULT_FRAMEWORK_VARIETY = 0.25;
+const FALLBACK_FRAMEWORK_BIAS: FrameworkBias = { tabata: 0.25, emom: 0.25, amrap: 0.25, circuit: 0.25 };
 
 export interface FrameworkBias {
   tabata: number;
@@ -189,31 +205,70 @@ export const getGoalTagsForAI = (goalId: PrimaryGoalId | null | undefined): stri
 };
 
 /**
- * Helper: Pick a framework based on goal bias
- * Uses weighted random selection from frameworkBias probabilities
+ * Helper: Pick a framework based on goal bias and recent success trends
+ * Returns weighted selection metadata so callers can log rationale.
  */
 export const pickFrameworkForGoal = (
-  goalId: PrimaryGoalId | null | undefined
-): 'tabata' | 'emom' | 'amrap' | 'circuit' => {
+  goalId: PrimaryGoalId | null | undefined,
+  options?: FrameworkSelectionOptions,
+): FrameworkSelectionResult => {
   const config = getPrimaryGoalConfig(goalId);
+  const frameworkBias = config?.frameworkBias ?? FALLBACK_FRAMEWORK_BIAS;
+  const variety = Math.min(1, Math.max(0, options?.preferences?.variety ?? DEFAULT_FRAMEWORK_VARIETY));
+  const manualWeights = options?.preferences?.manualWeights ?? {};
 
-  // Fallback: if no goal, default to EMOM (current app default)
-  if (!config) return 'emom';
+  const successLookup = new Map<WorkoutFramework, FrameworkSuccessSnapshot>();
+  options?.success?.forEach((stat) => successLookup.set(stat.framework, stat));
 
-  const { frameworkBias } = config;
+  const rawWeights = { ...frameworkBias } as FrameworkBias;
+
+  const computeBoost = (framework: WorkoutFramework): number => {
+    const stat = successLookup.get(framework);
+    if (!stat || !stat.sampleSize) return 1;
+
+    const completionBoost = 0.6 + stat.completionRate * 0.4;
+    const qualityBoost = 0.7 + Math.min(0.8, Math.max(0, stat.successScore - 0.8));
+    return Math.min(1.6, Math.max(0.6, (completionBoost + qualityBoost) / 2));
+  };
+
+  (Object.keys(rawWeights) as Array<keyof FrameworkBias>).forEach((key) => {
+    const framework = key.toUpperCase() as WorkoutFramework;
+    const boost = computeBoost(framework);
+    const manual = manualWeights[framework];
+    const base = typeof manual === 'number' ? manual : rawWeights[key];
+    const floor = variety / 4; // Guarantee some exploration
+    rawWeights[key] = Math.max(0.01, base * boost * (1 - variety) + floor);
+  });
+
+  const totalWeight = (Object.values(rawWeights) as number[]).reduce((sum, weight) => sum + weight, 0) || 1;
+  const normalizedWeights = (Object.keys(rawWeights) as Array<keyof FrameworkBias>).reduce(
+    (acc, key) => ({ ...acc, [key]: rawWeights[key] / totalWeight }),
+    {} as FrameworkBias,
+  );
+
   const roll = Math.random();
   let cumulative = 0;
+  let selected: keyof FrameworkBias | null = null;
 
-  const entries: [keyof FrameworkBias, number][] = Object.entries(frameworkBias) as any;
-
-  for (const [framework, weight] of entries) {
+  (Object.entries(normalizedWeights) as [keyof FrameworkBias, number][]).forEach(([framework, weight]) => {
+    if (selected) return;
     cumulative += weight;
     if (roll <= cumulative) {
-      return framework as any;
+      selected = framework;
     }
-  }
+  });
 
-  return 'emom'; // Fallback
+  const chosenFramework = (selected ?? 'emom') as FrameworkSelectionResult['framework'];
+
+  return {
+    framework: chosenFramework,
+    weights: normalizedWeights,
+    rationale: config
+      ? `${config.label} bias favored ${chosenFramework.toUpperCase()} with ${Math.round(
+          (normalizedWeights[chosenFramework] || 0) * 100,
+        )}% weight and variety ${Math.round(variety * 100)}%.`
+      : `Fallback selection using balanced weights; variety ${Math.round(variety * 100)}%.`,
+  };
 };
 
 /**
