@@ -335,44 +335,6 @@ export default function Home() {
           </div>
         </div>
 
-        {recommendedTimeBlock && (
-          <Card className="p-4 bg-card/60 border-border/60">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-full bg-primary/10 border border-primary/30 text-primary">
-                  <Clock size={18} />
-                </div>
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-bold">Optimal window</p>
-                  <p className="text-lg font-display font-bold text-white capitalize leading-none">
-                    {formatTimeBlockLabel(recommendedTimeBlock)}
-                  </p>
-                  {workout?.timeBlockHint ? (
-                    <p className="text-[11px] text-muted-foreground mt-1 leading-snug">{workout.timeBlockHint}</p>
-                  ) : optimalBlockPerformance ? (
-                    <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
-                      {optimalBlockPerformance.sampleSize} session sample •
-                      {` ${(optimalBlockPerformance.averageHitRate * 100).toFixed(0)}% hit-rate`}
-                      {optimalBlockPerformance.deltaHitRate
-                        ? ` (${(optimalBlockPerformance.deltaHitRate * 100).toFixed(1)}% vs avg)`
-                        : ""}
-                    </p>
-                  ) : (
-                    <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
-                      Biasing suggestions toward the block where you stick best.
-                    </p>
-                  )}
-                </div>
-              </div>
-              {recommendedTimeBlock !== currentTimeBlock && (
-                <div className="text-[11px] text-primary bg-primary/10 border border-primary/30 rounded-full px-3 py-1 font-semibold uppercase tracking-wider">
-                  Next up
-                </div>
-              )}
-            </div>
-          </Card>
-        )}
-
         {/* Main Action Card - Daily WOD */}
         {workoutLoading ? (
           <Card className="p-6 bg-card/50 border-border/50 h-48 flex items-center justify-center">
@@ -401,13 +363,6 @@ export default function Home() {
                   <RotateCw size={16} />
                 </Button>
               </div>
-
-              {workout.recommendedTimeBlock && (
-                <div className="text-[12px] text-primary font-semibold uppercase tracking-wider flex items-center gap-2 mt-1">
-                  <Clock size={14} />
-                  {formatTimeBlockLabel(workout.recommendedTimeBlock)} focus
-                </div>
-              )}
 
               <div>
                 <h2 className="text-3xl font-bold text-white mb-1 uppercase">
