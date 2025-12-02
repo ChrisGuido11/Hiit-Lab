@@ -510,6 +510,22 @@ export default function WorkoutRunner() {
     return "Go!";
   };
 
+  const formatNextTarget = (exercise: GeneratedWorkout["rounds"][number]) => {
+    if (workout?.framework === "Tabata") {
+      return `${workout.workSeconds ?? 20}s`;
+    }
+
+    if ((exercise as any).isHold) {
+      return `${exercise.reps}s`;
+    }
+
+    if ((exercise as any).alternatesSides) {
+      return `${exercise.reps}r (${exercise.reps / 2}/leg)`;
+    }
+
+    return `${exercise.reps} reps`;
+  };
+
   return (
     <MobileLayout hideNav>
       <div className="h-full flex flex-col relative bg-black">
@@ -625,13 +641,7 @@ export default function WorkoutRunner() {
             </div>
             {nextExercise && (
               <span className="font-display text-xl text-muted-foreground">
-                {workout.framework === "Tabata"
-                  ? `${workout.workSeconds ?? 20}s`
-                  : (nextExercise as any).isHold
-                  ? `${nextExercise.reps}s`
-                  : (nextExercise as any).alternatesSides
-                  ? `${nextExercise.reps}r (${nextExercise.reps / 2}/leg)`
-                  : `${nextExercise.reps} reps`}
+                {formatNextTarget(nextExercise)}
               </span>
             )}
           </div>
