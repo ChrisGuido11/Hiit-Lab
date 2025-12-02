@@ -7,6 +7,7 @@ import MobileLayout from "@/components/layout/mobile-layout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { GeneratedWorkout } from "@/../../shared/schema";
@@ -30,6 +31,11 @@ export default function WorkoutComplete() {
   const [roundsExpanded, setRoundsExpanded] = useState(false);
   const [roundActuals, setRoundActuals] = useState<Record<number, RoundActual>>({});
   const [newPRs, setNewPRs] = useState<string[]>([]);
+  const [intervalsExpanded, setIntervalsExpanded] = useState(false);
+
+  const updateRoundActual = (minuteIndex: number, data: RoundActual) => {
+    setRoundActuals((previous: Record<number, RoundActual>) => ({ ...previous, [minuteIndex]: { ...previous[minuteIndex], ...data } }));
+  };
 
   const { data: personalRecords = [] } = useQuery<any[]>({
     queryKey: ["/api/personal-records"],
@@ -351,6 +357,95 @@ export default function WorkoutComplete() {
             <span>Perfect</span>
             <span>Too Hard</span>
           </div>
+        </div>
+
+        {/* Interval Logging Section */}
+        <div className="w-full space-y-4">
+          <div className="text-center">
+            <h3 className="text-lg font-bold text-white mb-1">Log Your Intervals</h3>
+            <p className="text-sm text-muted-foreground">Tell the coach how it actually went.</p>
+          </div>
+
+          <Card className="w-full bg-card border-border/50 p-4 space-y-3 text-left">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs uppercase text-muted-foreground">Adjust Actual Performance</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-3 text-xs text-primary hover:text-primary"
+                onClick={() => setIntervalsExpanded((previous) => !previous)}
+              >
+                {intervalsExpanded ? "Hide all" : "View all"}
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              {(intervalsExpanded ? workout.rounds : workout.rounds.slice(0, 3)).map((round) => {
+                const currentActual = roundActuals[round.minuteIndex] || {};
+                return (
+                  <div
+                    key={`${round.minuteIndex}-${round.exerciseName}`}
+                    className="space-y-3 rounded-xl border border-border/40 bg-muted/5 p-4"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{round.exerciseName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Minute {round.minuteIndex} • Target: {round.reps} {(round as any).isHold ? "seconds" : "reps"}
+                        </p>
+                      </div>
+                      <Button
+                        variant={currentActual.skipped ? "default" : "outline"}
+                        size="sm"
+                        onClick={() =>
+                          updateRoundActual(round.minuteIndex, {
+                            skipped: !currentActual.skipped,
+                            actualReps: (round as any).isHold ? undefined : round.reps,
+                            actualSeconds: (round as any).isHold ? round.reps : undefined,
+                          })
+                        }
+                      >
+                        {currentActual.skipped ? "Skipped" : "Mark Skip"}
+                      </Button>
+                    </div>
+
+                    {!currentActual.skipped ? (
+                      <div className="flex items-center gap-3">
+                        <Label className="text-sm text-muted-foreground whitespace-nowrap">
+                          Actual {(round as any).isHold ? "seconds" : "reps"}
+                        </Label>
+                        <input
+                          type="number"
+                          min={0}
+                          className="w-28 rounded-lg border border-border/50 bg-card px-3 py-2 text-white"
+                          value={
+                            (round as any).isHold
+                              ? currentActual.actualSeconds ?? round.reps
+                              : currentActual.actualReps ?? round.reps
+                          }
+                          onChange={(event) => {
+                            const value = Math.max(0, Number(event.target.value));
+                            updateRoundActual(round.minuteIndex, {
+                              actualReps: (round as any).isHold ? currentActual.actualReps : value,
+                              actualSeconds: (round as any).isHold ? value : currentActual.actualSeconds,
+                              skipped: false,
+                            });
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">We'll down-weight this move in future plans.</p>
+                    )}
+                  </div>
+                );
+              })}
+              {!intervalsExpanded && workout.rounds.length > 3 ? (
+                <p className="text-xs text-muted-foreground text-center">
+                  +{workout.rounds.length - 3} more intervals
+                </p>
+              ) : null}
+            </div>
+          </Card>
         </div>
 
         <Card className="w-full bg-card border-border/50 p-4 space-y-4 text-left">
