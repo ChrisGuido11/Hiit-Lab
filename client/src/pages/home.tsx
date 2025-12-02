@@ -379,11 +379,11 @@ export default function Home() {
             <div className="text-muted-foreground">Generating workout...</div>
           </Card>
         ) : workout ? (
-          <Card className="relative overflow-hidden border-0 group cursor-pointer">
+          <Card className="relative overflow-hidden border-0 group">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-transparent z-0" />
             <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1517963879466-cd11fa9e5d34?q=80&w=1000&auto=format&fit=crop')] bg-cover bg-center opacity-20" />
-            
-            <div className="relative z-10 p-6 flex flex-col h-52 justify-between">
+
+            <div className="relative z-10 p-6 flex flex-col justify-between">
               <div className="flex justify-between items-start">
                 <div className="bg-primary/20 backdrop-blur-sm px-3 py-1 rounded text-primary text-xs font-bold uppercase tracking-wider border border-primary/20">
                   Daily WOD
@@ -464,10 +464,16 @@ export default function Home() {
                     </div>
                   ) : null;
                 })()}
+              </div>
 
+              {/* Start Button - Always visible at bottom */}
+              <div className="mt-6">
                 <Link href="/workout">
-                  <Button className="w-full bg-primary text-black hover:bg-primary/90 font-bold uppercase tracking-wider" data-testid="button-start-workout">
-                    <Play className="w-4 h-4 mr-2 fill-current" /> Start Workout
+                  <Button
+                    className="w-full h-14 bg-primary text-black hover:bg-primary/90 font-bold uppercase tracking-wider text-lg shadow-lg shadow-primary/20 transition-all hover:shadow-xl hover:shadow-primary/30"
+                    data-testid="button-start-workout"
+                  >
+                    <Play className="w-5 h-5 mr-2 fill-current" /> Start Workout
                   </Button>
                 </Link>
               </div>
