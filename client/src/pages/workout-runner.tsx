@@ -753,50 +753,39 @@ export default function WorkoutRunner() {
 
         {/* Lessons YouTube Drawer */}
         <Sheet open={isLessonsOpen} onOpenChange={setIsLessonsOpen}>
-          <SheetContent side="bottom" className="bg-card border-border/50 sm:max-w-md sm:rounded-t-3xl h-[90vh] flex flex-col p-0">
+          <SheetContent side="bottom" className="bg-card border-border/50 sm:max-w-md sm:rounded-t-3xl flex flex-col p-0">
             <SheetHeader className="p-6 pb-4">
               <SheetTitle>How to: {currentExercise?.exerciseName}</SheetTitle>
               <SheetDescription>
-                Watch a video lesson to master this exercise
+                Open YouTube to watch form tutorials
               </SheetDescription>
             </SheetHeader>
 
-            <div className="flex-1 overflow-hidden bg-black/40">
-              {currentExercise && hasDirectVideo(currentExercise.exerciseName) ? (
-                <iframe
-                  width="100%"
-                  height="100%"
-                  src={getVideoUrlForExercise(currentExercise.exerciseName)}
-                  title="YouTube video player"
-                  frameBorder="0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center p-6">
-                  <div className="text-center space-y-4">
-                    <p className="text-muted-foreground">
-                      Video not available for this exercise yet.
-                    </p>
-                    <Button
-                      variant="outline"
-                      className="gap-2"
-                      onClick={() => {
-                        const url = `https://www.youtube.com/results?search_query=how+to+${encodeURIComponent(currentExercise?.exerciseName || "")}`;
-                        window.open(url, "_blank");
-                      }}
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      Search YouTube
-                    </Button>
-                  </div>
-                </div>
-              )}
+            <div className="flex-1 flex flex-col items-center justify-center p-6 space-y-6">
+              <div className="text-center space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  We'll search for "{currentExercise?.exerciseName}" on YouTube so you can watch detailed form tutorials and tips from fitness experts.
+                </p>
+              </div>
+
+              <Button
+                className="w-full bg-primary text-black hover:bg-primary/90 font-bold uppercase tracking-wider gap-2 py-6 text-lg"
+                onClick={() => {
+                  const url = `https://www.youtube.com/results?search_query=how+to+${encodeURIComponent(currentExercise?.exerciseName || "")}`;
+                  window.open(url, "_blank");
+                  setIsLessonsOpen(false);
+                }}
+                data-testid="button-open-youtube"
+              >
+                <ExternalLink className="w-5 h-5" />
+                Open on YouTube
+              </Button>
             </div>
 
             <div className="p-6 pt-4 bg-card border-t border-border/30">
               <Button
-                className="w-full bg-primary text-black hover:bg-primary/90 font-bold uppercase tracking-wider"
+                variant="outline"
+                className="w-full"
                 onClick={() => setIsLessonsOpen(false)}
               >
                 Back to Workout
