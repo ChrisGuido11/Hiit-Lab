@@ -8,10 +8,13 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
-import type { GeneratedWorkout, Profile as ProfileModel, WorkoutSession } from "@/../../shared/schema";
+import type { GeneratedWorkout, Profile as ProfileModel, WorkoutRound, WorkoutSession } from "@/../../shared/schema";
 import { getQueryFn } from "@/lib/queryClient";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis } from "recharts";
+import { WeeklyPlanner } from "@/components/planner/weekly-planner";
+
+type WorkoutSessionWithRounds = WorkoutSession & { rounds: WorkoutRound[] };
 
 function getTimeGreeting(): string {
   const hour = new Date().getHours();
@@ -51,7 +54,7 @@ export default function Home() {
     retry: false,
   });
 
-  const { data: history = [] } = useQuery<WorkoutSession[] | null>({
+  const { data: history = [] } = useQuery<WorkoutSessionWithRounds[] | null>({
     queryKey: ["/api/workout/history"],
     enabled: !!user,
     queryFn: getQueryFn({ on401: "returnNull" }),
@@ -372,6 +375,8 @@ export default function Home() {
               </ChartContainer>
             </Card>
           </div>
+
+          <WeeklyPlanner history={historyData} generatedWorkout={workout ?? undefined} />
         </div>
 
         {/* Recent Activity Preview */}
