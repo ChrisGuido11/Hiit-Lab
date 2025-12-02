@@ -13,7 +13,11 @@ import { pickFrameworkForGoal } from "@shared/goals";
 import { insertProfileSchema, insertWorkoutSessionSchema } from "@shared/schema";
 import { z } from "zod";
 import { workoutRoundsArraySchema } from "./utils/roundValidation";
-import { buildPersonalizationInsights, summarizeSessionPerformance } from "./utils/personalization";
+import {
+  aggregateExerciseOutcomes,
+  buildPersonalizationInsights,
+  summarizeSessionPerformance,
+} from "./utils/personalization";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -114,7 +118,8 @@ export async function registerRoutes(
       }
 
       const history = await storage.getWorkoutSessions(userId);
-      const personalization = buildPersonalizationInsights(history);
+      const exerciseStats = await storage.getExerciseStats(userId);
+      const personalization = buildPersonalizationInsights(history, 8, exerciseStats);
 
       // Check for framework override from query parameter
       const frameworkOverride = req.query.framework as string | undefined;
@@ -211,6 +216,17 @@ export async function registerRoutes(
       }));
       
       await storage.createWorkoutRounds(roundsData);
+
+      // Update exercise-level stats for personalization
+      const exerciseSummaries = aggregateExerciseOutcomes(
+        roundsData as Array<
+          Pick<
+            (typeof roundsData)[number],
+            "exerciseName" | "reps" | "actualReps" | "actualSeconds" | "skipped" | "isHold"
+          >
+        >,
+      );
+      await storage.upsertExerciseStats(userId, exerciseSummaries);
       
       // Update skill score based on RPE
       if (perceivedExertion || roundsData.length) {

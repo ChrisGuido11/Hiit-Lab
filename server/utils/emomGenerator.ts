@@ -180,6 +180,40 @@ function weightedRandomSelection<T>(items: T[], getWeight: (item: T) => number):
   return items[items.length - 1]; // Fallback
 }
 
+function applyExerciseUtilityWeight(
+  baseWeight: number,
+  exerciseName: string,
+  personalization?: PersonalizationInsights,
+): number {
+  if (!personalization) return baseWeight;
+  const stats = personalization.exerciseScores[exerciseName];
+  if (!stats) return baseWeight;
+
+  const utilityBoost = clampNumber(stats.utility, 0.75, 1.35);
+  const confidenceBoost = clampNumber(1 + Math.min(stats.sampleSize, 20) / 80, 1, 1.25);
+  return baseWeight * utilityBoost * confidenceBoost;
+}
+
+function banditSelectExercise<T extends { name: string }>(
+  candidates: T[],
+  personalization: PersonalizationInsights | undefined,
+  baseWeight: (item: T) => number,
+  explorationEpsilon = 0.15,
+): T {
+  if (!candidates.length) {
+    throw new Error("No exercise candidates available");
+  }
+
+  if (personalization?.exerciseScores && Math.random() < explorationEpsilon) {
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  return weightedRandomSelection(candidates, (item) => {
+    const base = baseWeight(item);
+    return applyExerciseUtilityWeight(base, item.name, personalization);
+  });
+}
+
 function normalizeExerciseBias(
   bias:
     | { compoundLifts: number; cardio: number; plyometric: number; mobility: number }
@@ -337,13 +371,14 @@ export function generateEMOMWorkout(
     const priorityCandidates = unusedExercises.length > 0 ? unusedExercises : candidates;
     const finalCandidates = priorityCandidates.length > 0 ? priorityCandidates : availableExercises.filter(ex => ex.name !== lastExercise);
 
-    // Use weighted random selection with aggressive variety boost
-    const exercise = weightedRandomSelection(
+    // Use weighted selection with exploration/exploitation for personalization
+    const exercise = banditSelectExercise(
       finalCandidates,
+      personalization,
       (ex) => {
         let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
         baseScore *= getMusclePreferenceMultiplier(ex.muscleGroup, personalization);
-        
+
         // AGGRESSIVE BOOST: Unused exercises get 10x weight
         if (!usedExercises.has(ex.name)) {
           baseScore *= 10;
@@ -358,9 +393,10 @@ export function generateEMOMWorkout(
           const usageCount = usedExercises.get(ex.name) || 0;
           baseScore = baseScore / (1 + usageCount * 1.5);
         }
-        
+
         return baseScore;
-      }
+      },
+      0.12,
     );
 
     rounds.push({
@@ -483,17 +519,19 @@ export function generateTabataWorkout(
   // Select unique exercises with variety preference
   for (let i = 0; i < numExercises; i++) {
     const candidates = availableExercises.filter(ex => !selectedExercises.includes(ex));
-      const exercise = weightedRandomSelection(
-        candidates.length > 0 ? candidates : availableExercises,
-        (ex) => {
-          let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
-          baseScore *= getMusclePreferenceMultiplier(ex.muscleGroup, personalization);
-          // Boost unused exercises to encourage variety
-          if (!exerciseUsageCount.has(ex.name)) {
-            baseScore *= 1.5;
-          }
-          return baseScore;
-      }
+    const exercise = banditSelectExercise(
+      candidates.length > 0 ? candidates : availableExercises,
+      personalization,
+      (ex) => {
+        let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
+        baseScore *= getMusclePreferenceMultiplier(ex.muscleGroup, personalization);
+        // Boost unused exercises to encourage variety
+        if (!exerciseUsageCount.has(ex.name)) {
+          baseScore *= 1.5;
+        }
+        return baseScore;
+      },
+      0.15,
     );
     selectedExercises.push(exercise);
     exerciseUsageCount.set(exercise.name, (exerciseUsageCount.get(exercise.name) || 0) + 1);
@@ -626,17 +664,19 @@ export function generateAMRAPWorkout(
 
   for (let i = 0; i < numExercises; i++) {
     const candidates = availableExercises.filter(ex => !circuitExercises.includes(ex));
-      const exercise = weightedRandomSelection(
-        candidates.length > 0 ? candidates : availableExercises,
-        (ex) => {
-          let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
-          baseScore *= getMusclePreferenceMultiplier(ex.muscleGroup, personalization);
-          // Boost unused exercises to encourage variety
-          if (!exerciseUsageCount.has(ex.name)) {
-            baseScore *= 1.5;
-          }
-          return baseScore;
-      }
+    const exercise = banditSelectExercise(
+      candidates.length > 0 ? candidates : availableExercises,
+      personalization,
+      (ex) => {
+        let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
+        baseScore *= getMusclePreferenceMultiplier(ex.muscleGroup, personalization);
+        // Boost unused exercises to encourage variety
+        if (!exerciseUsageCount.has(ex.name)) {
+          baseScore *= 1.5;
+        }
+        return baseScore;
+      },
+      0.15,
     );
     circuitExercises.push(exercise);
     exerciseUsageCount.set(exercise.name, (exerciseUsageCount.get(exercise.name) || 0) + 1);
@@ -754,17 +794,19 @@ export function generateCircuitWorkout(
 
   for (let i = 0; i < exercisesPerRound; i++) {
     const candidates = availableExercises.filter(ex => !circuitExercises.includes(ex));
-      const exercise = weightedRandomSelection(
-        candidates.length > 0 ? candidates : availableExercises,
-        (ex) => {
-          let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
-          baseScore *= getMusclePreferenceMultiplier(ex.muscleGroup, personalization);
-          // Boost unused exercises to encourage variety
-          if (!exerciseUsageCount.has(ex.name)) {
-            baseScore *= 1.5;
-          }
-          return baseScore;
-      }
+    const exercise = banditSelectExercise(
+      candidates.length > 0 ? candidates : availableExercises,
+      personalization,
+      (ex) => {
+        let baseScore = calculateExerciseFitnessScore(ex, exerciseBias);
+        baseScore *= getMusclePreferenceMultiplier(ex.muscleGroup, personalization);
+        // Boost unused exercises to encourage variety
+        if (!exerciseUsageCount.has(ex.name)) {
+          baseScore *= 1.5;
+        }
+        return baseScore;
+      },
+      0.15,
     );
     circuitExercises.push(exercise);
     exerciseUsageCount.set(exercise.name, (exerciseUsageCount.get(exercise.name) || 0) + 1);
