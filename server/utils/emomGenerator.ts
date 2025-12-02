@@ -916,20 +916,67 @@ export function generateCircuitWorkout(
   };
 }
 
-export function updateSkillScore(currentScore: number, session: SessionPerformanceSummary): number {
-  const { averageHitRate, skipRate, averageRpe } = session;
+export function updateSkillScore(
+  currentScore: number,
+  recentSessions: SessionPerformanceSummary[],
+  windowSize = 6
+): number {
+  if (!recentSessions.length) return currentScore;
 
-  let newScore = currentScore;
+  const recent = recentSessions.slice(0, windowSize);
 
-  if (typeof averageRpe === "number") {
-    if (averageRpe <= 2) newScore += 3;
-    else if (averageRpe <= 3) newScore += 1;
-    else if (averageRpe >= 5) newScore -= 4;
-    else newScore -= 2;
+  const aggregate = recent.reduce(
+    (acc, session) => {
+      acc.hitRate += session.averageHitRate;
+      acc.skipRate += session.skipRate;
+      if (typeof session.averageRpe === "number") {
+        acc.rpeSum += session.averageRpe;
+        acc.rpeCount += 1;
+      }
+
+      for (const [movement, perf] of Object.entries(session.movementPerformance)) {
+        const bucket = acc.movement[movement] ?? { hitRate: 0, skipRate: 0, count: 0 };
+        bucket.hitRate += perf.hitRate;
+        bucket.skipRate += perf.skipRate;
+        bucket.count += 1;
+        acc.movement[movement] = bucket;
+      }
+
+      return acc;
+    },
+    { hitRate: 0, skipRate: 0, rpeSum: 0, rpeCount: 0, movement: {} as Record<string, { hitRate: number; skipRate: number; count: number }> }
+  );
+
+  const averageHitRate = aggregate.hitRate / recent.length;
+  const averageSkipRate = aggregate.skipRate / recent.length;
+  const averageRpe = aggregate.rpeCount ? aggregate.rpeSum / aggregate.rpeCount : null;
+
+  const movementAverageScore = Object.values(aggregate.movement).reduce((sum, bucket) => {
+    const hitRate = bucket.hitRate / bucket.count;
+    const skipRate = bucket.skipRate / bucket.count;
+    return sum + (hitRate - 1) * 8 - skipRate * 10;
+  }, 0);
+
+  const movementScore = Object.keys(aggregate.movement).length
+    ? movementAverageScore / Object.keys(aggregate.movement).length
+    : 0;
+
+  const baseScoreChange = (averageHitRate - 1) * 10 - averageSkipRate * 12 + movementScore * 0.5;
+
+  const sustainedProgress =
+    averageHitRate >= 1.03 && averageSkipRate <= 0.08 && (averageRpe ?? 3) <= 3.5;
+  const sustainedStruggle =
+    averageHitRate <= 0.95 || averageSkipRate >= 0.15 || (averageRpe ?? 3.5) >= 4.5;
+
+  let adjustment = baseScoreChange;
+
+  if (adjustment > 0) {
+    adjustment *= sustainedProgress ? 1.2 : 0.6;
+  } else if (adjustment < 0) {
+    adjustment *= sustainedStruggle ? 1.3 : 0.7;
   }
 
-  newScore += (averageHitRate - 1) * 12; // reward exceeding targets
-  newScore -= skipRate * 12; // penalize skips
+  adjustment = clampNumber(adjustment, -12, 12);
 
-  return clampNumber(newScore, 0, 100);
+  return clampNumber(currentScore + adjustment, 0, 100);
 }

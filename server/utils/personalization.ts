@@ -12,6 +12,7 @@ export interface SessionPerformanceSummary {
   averageHitRate: number;
   skipRate: number;
   averageRpe: number | null;
+  movementPerformance: Record<string, { hitRate: number; skipRate: number; averageRpe: number | null }>;
 }
 
 export function buildPersonalizationInsights(
@@ -82,10 +83,18 @@ export function summarizeSessionPerformance(
   let hitSum = 0;
   let hitCount = 0;
   let skipped = 0;
+  const movementBuckets: Record<string, { hitSum: number; hitCount: number; skipped: number; total: number }> = {};
 
   for (const round of rounds) {
     if (round.skipped) {
       skipped += 1;
+      const movement = (round as any).targetMuscleGroup as string | undefined;
+      if (movement) {
+        const bucket = movementBuckets[movement] ?? { hitSum: 0, hitCount: 0, skipped: 0, total: 0 };
+        bucket.skipped += 1;
+        bucket.total += 1;
+        movementBuckets[movement] = bucket;
+      }
       continue;
     }
     const target = round.reps || 1;
@@ -94,13 +103,36 @@ export function summarizeSessionPerformance(
       : round.actualReps ?? round.actualSeconds ?? target;
     hitSum += Math.min(actualValue / target, 1.5);
     hitCount += 1;
+
+    const movement = (round as any).targetMuscleGroup as string | undefined;
+    if (movement) {
+      const bucket = movementBuckets[movement] ?? { hitSum: 0, hitCount: 0, skipped: 0, total: 0 };
+      bucket.hitSum += Math.min(actualValue / target, 1.5);
+      bucket.hitCount += 1;
+      bucket.total += 1;
+      movementBuckets[movement] = bucket;
+    }
   }
 
   const totalRounds = rounds.length || 1;
+  const movementPerformance = Object.fromEntries(
+    Object.entries(movementBuckets).map(([movement, bucket]) => {
+      const movementHitRate = bucket.hitCount ? bucket.hitSum / bucket.hitCount : 1;
+      const movementSkipRate = bucket.total ? bucket.skipped / bucket.total : 0;
+      return [movement, { hitRate: movementHitRate, skipRate: movementSkipRate, averageRpe: null }];
+    })
+  );
+  const rpeValue = typeof perceivedExertion === "number" ? perceivedExertion : null;
 
   return {
     averageHitRate: hitCount ? hitSum / hitCount : 1,
     skipRate: skipped / totalRounds,
-    averageRpe: typeof perceivedExertion === "number" ? perceivedExertion : null,
+    averageRpe: rpeValue,
+    movementPerformance: Object.fromEntries(
+      Object.entries(movementPerformance).map(([movement, perf]) => [
+        movement,
+        { ...perf, averageRpe: rpeValue },
+      ])
+    ),
   };
 }

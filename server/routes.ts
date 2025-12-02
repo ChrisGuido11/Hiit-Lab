@@ -252,7 +252,14 @@ export async function registerRoutes(
         const profile = await storage.getProfile(userId);
         if (profile) {
           const sessionPerformance = summarizeSessionPerformance(roundsData as any, perceivedExertion);
-          const newSkillScore = updateSkillScore(profile.skillScore, sessionPerformance);
+          const history = await storage.getWorkoutSessions(userId);
+          const performanceHistory = history.map((previousSession) =>
+            summarizeSessionPerformance(previousSession.rounds as any, previousSession.perceivedExertion)
+          );
+          if (performanceHistory.length) {
+            performanceHistory[0] = sessionPerformance; // ensure freshest data for the newest session
+          }
+          const newSkillScore = updateSkillScore(profile.skillScore, performanceHistory);
           await storage.updateProfile(userId, { skillScore: newSkillScore });
         }
       }
