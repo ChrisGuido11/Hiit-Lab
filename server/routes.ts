@@ -22,6 +22,12 @@ import {
   buildPersonalizationInsights,
   summarizeSessionPerformance,
 } from "./utils/personalization";
+import {
+  buildPerformanceSnapshots,
+  detectPrReadiness,
+  evaluatePerformanceForPrs,
+  schedulePrAttempts,
+} from "./utils/prTracker";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -196,6 +202,15 @@ export async function registerRoutes(
           `Exercises filtered for available equipment and tuned toward ${sessionIntent.focusToday ?? profile.goalFocus ?? "general"} focus.`,
       };
 
+      const prReadiness = detectPrReadiness(history, personalization);
+      const prPlan = schedulePrAttempts(workout.rounds as any, prReadiness);
+      workout.rounds = prPlan.rounds as any;
+      workout.prPlan = {
+        ready: prReadiness.ready,
+        reason: prReadiness.reason,
+        attempts: prPlan.attempts,
+      };
+
       res.json(workout);
     } catch (error) {
       console.error("Error generating workout:", error);
@@ -245,24 +260,67 @@ export async function registerRoutes(
         reps: round.reps,
         isHold: Boolean(round.isHold),
         alternatesSides: Boolean(round.alternatesSides),
+        targetLoad: round.targetLoad ?? null,
+        prAttempt: Boolean(round.prAttempt),
+        prModality: round.prModality ?? (round.isHold ? "time" : "reps"),
         actualReps: round.actualReps ?? null,
         actualSeconds: round.actualSeconds ?? null,
+        actualLoad: round.actualLoad ?? null,
         skipped: Boolean(round.skipped),
       }));
-      
-      await storage.createWorkoutRounds(roundsData);
+
+      const storedRounds = await storage.createWorkoutRounds(roundsData);
 
       // Update exercise-level stats for personalization
       const exerciseSummaries = aggregateExerciseOutcomes(
-        roundsData as Array<
+        storedRounds as Array<
           Pick<
-            (typeof roundsData)[number],
+            (typeof storedRounds)[number],
             "exerciseName" | "reps" | "actualReps" | "actualSeconds" | "skipped" | "isHold"
           >
         >,
       );
       await storage.upsertExerciseStats(userId, exerciseSummaries);
+
+      // Record performance history + PRs
+      const performanceSnapshots = buildPerformanceSnapshots(storedRounds, session.id);
+      await storage.recordPerformanceHistory(
+        userId,
+        performanceSnapshots.map((snapshot) => ({
+          sessionId: snapshot.sessionId,
+          roundId: snapshot.roundId ?? undefined,
+          movement: snapshot.movement,
+          modality: snapshot.modality,
+          value: snapshot.value,
+          unit: snapshot.unit,
+          prAttempt: snapshot.prAttempt,
+        })),
+      );
+
+      const existingRecords = await storage.getPersonalRecords(userId);
+      const { newRecords, nearMisses, recordUpdates } = evaluatePerformanceForPrs(
+        performanceSnapshots,
+        existingRecords,
+      );
+
+      for (const record of recordUpdates) {
+        const { userId: _ignore, createdAt: _ignoreCreated, ...rest } = record as any;
+        await storage.upsertPersonalRecord(userId, rest);
+      }
       
+      const prHighlights = [...newRecords, ...nearMisses]
+        .slice(0, 3)
+        .map((entry) =>
+          entry.type === "new"
+            ? `${entry.movement} ${entry.modality.toUpperCase()} PR (${Math.round(entry.value * 10) / 10} ${entry.unit})`
+            : `Close on ${entry.movement} (${entry.modality}): ${Math.round(entry.value * 10) / 10} vs ${Math.round((entry.previousValue ?? 0) * 10) / 10}`,
+        );
+
+      let sessionResponse = session;
+      if (prHighlights.length) {
+        sessionResponse = await storage.updateWorkoutSession(session.id, { prHighlights });
+      }
+
       // Update skill score based on RPE
       if (perceivedExertion || roundsData.length) {
         const profile = await storage.getProfile(userId);
@@ -279,8 +337,8 @@ export async function registerRoutes(
           await storage.updateProfile(userId, { skillScore: newSkillScore });
         }
       }
-      
-      res.status(201).json(session);
+
+      res.status(201).json({ session: sessionResponse, prCelebrations: { newRecords, nearMisses } });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid session data", errors: error.errors });

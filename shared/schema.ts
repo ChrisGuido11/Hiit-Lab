@@ -118,6 +118,7 @@ export const workoutSessions = pgTable("workout_sessions", {
   perceivedExertion: integer("perceived_exertion"), // 1-5 RPE
   notes: text("notes"),
   completed: boolean("completed").default(false).notNull(),
+  prHighlights: jsonb("pr_highlights"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -152,8 +153,12 @@ export const workoutRounds = pgTable("workout_rounds", {
   reps: integer("reps").notNull(),
   isHold: boolean("is_hold").default(false).notNull(),
   alternatesSides: boolean("alternates_sides").default(false).notNull(),
+  targetLoad: doublePrecision("target_load"),
+  prAttempt: boolean("pr_attempt").default(false).notNull(),
+  prModality: text("pr_modality"),
   actualReps: integer("actual_reps"),
   actualSeconds: integer("actual_seconds"),
+  actualLoad: doublePrecision("actual_load"),
   skipped: boolean("skipped").default(false).notNull(),
 });
 
@@ -170,6 +175,8 @@ export const insertWorkoutRoundSchema = createInsertSchema(workoutRounds).omit({
 
 export type InsertWorkoutRound = z.infer<typeof insertWorkoutRoundSchema>;
 export type WorkoutRound = typeof workoutRounds.$inferSelect;
+
+export type PerformanceModality = "reps" | "time" | "load";
 
 // Exercise-level performance stats
 export const exerciseStats = pgTable(
@@ -204,8 +211,12 @@ export interface GeneratedWorkout {
     reps: number;
     isHold?: boolean;
     alternatesSides?: boolean;
+    targetLoad?: number | null;
+    prAttempt?: boolean;
+    prModality?: PerformanceModality;
     actualReps?: number;
     actualSeconds?: number;
+    actualLoad?: number | null;
     skipped?: boolean;
   }>;
   // Framework-specific metadata
@@ -213,10 +224,62 @@ export interface GeneratedWorkout {
   restSeconds?: number; // For Tabata/Circuit: rest duration
   sets?: number; // For Tabata: number of intervals per exercise
   totalRounds?: number; // For Circuit: number of complete rounds
+  prPlan?: {
+    ready: boolean;
+    reason: string;
+    attempts: Array<{
+      minuteIndex: number;
+      exerciseName: string;
+      modality: PerformanceModality;
+    }>;
+  };
   intent?: SessionIntent;
   rationale?: {
     framework: string;
     intensity: string;
     exerciseSelection: string;
   };
+}
+
+export const personalRecords = pgTable(
+  "personal_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+    movement: text("movement").notNull(),
+    modality: text("modality").notNull().$type<PerformanceModality>(),
+    value: doublePrecision("value").notNull(),
+    unit: text("unit").notNull(),
+    sessionId: uuid("session_id").references(() => workoutSessions.id, { onDelete: 'cascade' }),
+    roundId: uuid("round_id").references(() => workoutRounds.id, { onDelete: 'cascade' }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("personal_record_key").on(table.userId, table.movement, table.modality)]
+);
+
+export const performanceHistory = pgTable("performance_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  sessionId: uuid("session_id").notNull().references(() => workoutSessions.id, { onDelete: 'cascade' }),
+  roundId: uuid("round_id").references(() => workoutRounds.id, { onDelete: 'cascade' }),
+  movement: text("movement").notNull(),
+  modality: text("modality").notNull().$type<PerformanceModality>(),
+  value: doublePrecision("value").notNull(),
+  unit: text("unit").notNull(),
+  prAttempt: boolean("pr_attempt").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type PersonalRecord = typeof personalRecords.$inferSelect;
+export type InsertPersonalRecord = typeof personalRecords.$inferInsert;
+export type PerformanceHistoryEntry = typeof performanceHistory.$inferSelect;
+export type InsertPerformanceHistoryEntry = typeof performanceHistory.$inferInsert;
+
+export interface PrCelebration {
+  movement: string;
+  modality: PerformanceModality;
+  value: number;
+  unit: string;
+  previousValue?: number | null;
+  type: "new" | "near_miss";
 }

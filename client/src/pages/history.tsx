@@ -78,21 +78,33 @@ export default function History() {
                 setLocation("/workout/detail");
               }}
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex gap-4 items-start">
-                  <div className="h-12 w-12 rounded-lg bg-secondary flex items-center justify-center">
-                    <Award className="text-muted-foreground w-6 h-6" />
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex gap-4 items-start">
+                    <div className="h-12 w-12 rounded-lg bg-secondary flex items-center justify-center">
+                      <Award className="text-muted-foreground w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-white">{session.focusLabel}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(session.createdAt as unknown as string)} • {session.durationMinutes} min
+                      </p>
+                      {session.notes ? (
+                        <p className="text-xs text-muted-foreground italic">“{session.notes}”</p>
+                      ) : null}
+                      {session.prHighlights && session.prHighlights.length ? (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {session.prHighlights.slice(0, 2).map((highlight) => (
+                            <span
+                              key={highlight}
+                              className="text-[11px] px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/40"
+                            >
+                              {highlight}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-bold text-white">{session.focusLabel}</h3>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDate(session.createdAt as unknown as string)} • {session.durationMinutes} min
-                    </p>
-                    {session.notes ? (
-                      <p className="text-xs text-muted-foreground italic">“{session.notes}”</p>
-                    ) : null}
-                  </div>
-                </div>
                 <div className="text-right text-xs text-muted-foreground space-y-1">
                   <p className="font-bold uppercase text-white">{session.difficultyTag}</p>
                   <p>RPE: {session.perceivedExertion ?? "-"}</p>

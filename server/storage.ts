@@ -4,6 +4,8 @@ import {
   workoutSessions,
   workoutRounds,
   exerciseStats,
+  personalRecords,
+  performanceHistory,
   type User,
   type UpsertUser,
   type Profile,
@@ -14,6 +16,10 @@ import {
   type InsertWorkoutRound,
   type ExerciseStat,
   type InsertExerciseStat,
+  type PersonalRecord,
+  type InsertPersonalRecord,
+  type InsertPerformanceHistoryEntry,
+  type PerformanceHistoryEntry,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql } from "drizzle-orm";
@@ -43,6 +49,17 @@ export interface IStorage {
   // Exercise performance stats
   upsertExerciseStats(userId: string, stats: Array<Omit<InsertExerciseStat, "userId" | "id">>): Promise<ExerciseStat[]>;
   getExerciseStats(userId: string): Promise<ExerciseStat[]>;
+
+  // Performance history + PR tracking
+  recordPerformanceHistory(
+    userId: string,
+    entries: Array<Omit<InsertPerformanceHistoryEntry, "userId" | "id" | "createdAt">>,
+  ): Promise<PerformanceHistoryEntry[]>;
+  upsertPersonalRecord(
+    userId: string,
+    record: Omit<InsertPersonalRecord, "userId" | "id" | "createdAt">,
+  ): Promise<PersonalRecord>;
+  getPersonalRecords(userId: string): Promise<PersonalRecord[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -182,6 +199,41 @@ export class DatabaseStorage implements IStorage {
 
   async getExerciseStats(userId: string): Promise<ExerciseStat[]> {
     return db.select().from(exerciseStats).where(eq(exerciseStats.userId, userId));
+  }
+
+  async recordPerformanceHistory(
+    userId: string,
+    entries: Array<Omit<InsertPerformanceHistoryEntry, "userId" | "id" | "createdAt">>,
+  ): Promise<PerformanceHistoryEntry[]> {
+    if (!entries.length) return [];
+
+    const payload = entries.map((entry) => ({ ...entry, userId }));
+    return db.insert(performanceHistory).values(payload).returning();
+  }
+
+  async upsertPersonalRecord(
+    userId: string,
+    record: Omit<InsertPersonalRecord, "userId" | "id" | "createdAt">,
+  ): Promise<PersonalRecord> {
+    const [row] = await db
+      .insert(personalRecords)
+      .values({ ...record, userId })
+      .onConflictDoUpdate({
+        target: [personalRecords.userId, personalRecords.movement, personalRecords.modality],
+        set: {
+          value: record.value,
+          unit: record.unit,
+          sessionId: record.sessionId ?? null,
+          roundId: record.roundId ?? null,
+          createdAt: new Date(),
+        },
+      })
+      .returning();
+    return row;
+  }
+
+  async getPersonalRecords(userId: string): Promise<PersonalRecord[]> {
+    return db.select().from(personalRecords).where(eq(personalRecords.userId, userId));
   }
 }
 

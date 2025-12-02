@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Play, Pause, SkipForward, X, RotateCcw, Settings, BookOpen, ExternalLink } from "lucide-react";
 import MobileLayout from "@/components/layout/mobile-layout";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -23,6 +24,7 @@ type RunnerSettings = {
 type RoundActual = {
   actualReps?: number;
   actualSeconds?: number;
+  actualLoad?: number;
   skipped?: boolean;
 };
 
@@ -66,6 +68,7 @@ export default function WorkoutRunner() {
         initial[round.minuteIndex] = {
           actualReps: round.isHold ? undefined : round.reps,
           actualSeconds: round.isHold ? round.reps : undefined,
+          actualLoad: round.actualLoad ?? round.targetLoad,
           skipped: false,
         };
       });
@@ -573,7 +576,14 @@ export default function WorkoutRunner() {
             <div className="flex items-end gap-3">
               <div>
                 <p className="text-muted-foreground uppercase text-xs font-bold tracking-wider mb-1">Current Move</p>
-                <h2 className="text-4xl font-display font-bold text-white uppercase">{currentExercise.exerciseName}</h2>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-4xl font-display font-bold text-white uppercase">{currentExercise.exerciseName}</h2>
+                  {currentExercise.prAttempt ? (
+                    <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+                      PR attempt
+                    </Badge>
+                  ) : null}
+                </div>
               </div>
               <Button
                 variant="outline"
@@ -615,22 +625,33 @@ export default function WorkoutRunner() {
           </div>
 
           {/* Next Up Preview */}
-            <div className="bg-black/40 rounded-xl p-4 flex items-center justify-between mb-6 border border-border/30">
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-1 bg-primary rounded-full" />
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase font-bold">Next Up</p>
-                <p className="font-bold text-white">{nextExercise ? nextExercise.exerciseName : "Finish"}</p>
+          <div className="bg-black/40 rounded-xl p-4 flex items-center justify-between mb-6 border border-border/30">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-1 bg-primary rounded-full" />
+              <div>
+                <p className="text-xs text-muted-foreground uppercase font-bold">Next Up</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-bold text-white">{nextExercise ? nextExercise.exerciseName : "Finish"}</p>
+                  {nextExercise?.prAttempt ? (
+                    <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+                      PR
+                    </Badge>
+                  ) : null}
+                </div>
               </div>
             </div>
             {nextExercise && (
               <span className="font-display text-xl text-muted-foreground">
                 {workout.framework === "Tabata"
                   ? `${workout.workSeconds ?? 20}s`
-                  : (nextExercise as any).isHold ? `${nextExercise.reps}s` : (nextExercise as any).alternatesSides ? `${nextExercise.reps}r (${nextExercise.reps / 2}/leg)` : `${nextExercise.reps} reps`}
-                </span>
-              )}
-            </div>
+                  : (nextExercise as any).isHold
+                  ? `${nextExercise.reps}s`
+                  : (nextExercise as any).alternatesSides
+                  ? `${nextExercise.reps}r (${nextExercise.reps / 2}/leg)`
+                  : `${nextExercise.reps} reps`}
+              </span>
+            )}
+          </div>
 
             {/* Interval feedback */}
             <div className="mb-6 space-y-3 rounded-xl border border-border/40 bg-muted/5 p-4">

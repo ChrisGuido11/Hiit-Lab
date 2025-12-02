@@ -9,13 +9,16 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import type { GeneratedWorkout } from "@/../../shared/schema";
+import type { GeneratedWorkout, PrCelebration, WorkoutSession } from "@/../../shared/schema";
 
 type RoundActual = {
   actualReps?: number;
   actualSeconds?: number;
+  actualLoad?: number;
   skipped?: boolean;
 };
+
+type PrCelebrations = { newRecords: PrCelebration[]; nearMisses: PrCelebration[] };
 
 export default function WorkoutComplete() {
   const [, setLocation] = useLocation();
@@ -25,6 +28,7 @@ export default function WorkoutComplete() {
   const [notes, setNotes] = useState("");
   const [roundsExpanded, setRoundsExpanded] = useState(false);
   const [roundActuals, setRoundActuals] = useState<Record<number, RoundActual>>({});
+  const [celebrations, setCelebrations] = useState<PrCelebrations | null>(null);
 
   const { data: workout, isLoading: isFallbackLoading } = useQuery<GeneratedWorkout | null>({
     queryKey: ["/api/workout/generate"],
@@ -47,8 +51,10 @@ export default function WorkoutComplete() {
     }
   }, [queryClient, workout]);
 
-  const saveWorkoutMutation = useMutation({
-    mutationFn: async ({ rpe, notes: sessionNotes }: { rpe: number; notes?: string }) => {
+  type SaveSessionResponse = { session: WorkoutSession; prCelebrations?: PrCelebrations };
+
+  const saveWorkoutMutation = useMutation<SaveSessionResponse, Error, { rpe: number; notes?: string }>({
+    mutationFn: async ({ rpe, notes: sessionNotes }) => {
       if (!workout) throw new Error("No workout data");
 
       const payloadRounds = workout.rounds.map((round) => {
@@ -57,6 +63,7 @@ export default function WorkoutComplete() {
           ...round,
           actualReps: round.isHold ? undefined : actual.actualReps ?? round.reps,
           actualSeconds: round.isHold ? actual.actualSeconds ?? round.reps : actual.actualSeconds,
+          actualLoad: actual.actualLoad ?? round.actualLoad,
           skipped: Boolean(actual.skipped),
         };
       });
@@ -87,19 +94,28 @@ export default function WorkoutComplete() {
 
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       if (typeof window !== "undefined") {
         window.sessionStorage.removeItem("latestWorkoutCompletion");
       }
+      setCelebrations(data.prCelebrations ?? null);
       queryClient.invalidateQueries({ queryKey: ["/api/workout/history"] });
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
       // Clear the workout cache completely so it doesn't show old workouts
       queryClient.removeQueries({ queryKey: ["/api/workout/generate"] });
       toast({
-        title: "Workout logged!",
-        description: "We use your sessions to personalize and improve your plan.",
+        title: data.prCelebrations?.newRecords.length
+          ? "PR unlocked!"
+          : data.prCelebrations?.nearMisses.length
+          ? "So close to a PR"
+          : "Workout logged!",
+        description:
+          data.prCelebrations &&
+          (data.prCelebrations.newRecords.length || data.prCelebrations.nearMisses.length)
+            ? "Progress saved — check the celebration card below."
+            : "We use your sessions to personalize and improve your plan.",
       });
-      setTimeout(() => setLocation("/"), 1000);
+      setTimeout(() => setLocation("/"), data.prCelebrations ? 2000 : 1000);
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -186,6 +202,10 @@ export default function WorkoutComplete() {
     );
   }
 
+  const hasCelebrations = Boolean(
+    celebrations && (celebrations.newRecords.length || celebrations.nearMisses.length),
+  );
+
   return (
     <MobileLayout hideNav>
       <div className="min-h-full flex flex-col items-center p-6 pt-8 pb-32 text-center space-y-8 bg-black">
@@ -201,6 +221,36 @@ export default function WorkoutComplete() {
           <h1 className="text-5xl font-bold text-white mb-2">CRUSHED IT!</h1>
           <p className="text-xl text-muted-foreground">Workout Complete</p>
         </div>
+
+        {hasCelebrations ? (
+          <Card className="w-full bg-gradient-to-r from-primary/10 to-primary/5 border-primary/40 p-4 text-left space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs uppercase text-primary font-bold">Performance highlights</p>
+              <span className="text-xs text-muted-foreground">Live PR tracking</span>
+            </div>
+            {celebrations?.newRecords.length ? (
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-white">New PRs</p>
+                {celebrations.newRecords.map((record) => (
+                  <p key={`${record.movement}-${record.modality}`} className="text-sm text-primary">
+                    {record.movement} • {record.modality.toUpperCase()} • {Math.round(record.value * 10) / 10} {record.unit}
+                  </p>
+                ))}
+              </div>
+            ) : null}
+            {celebrations?.nearMisses.length ? (
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-white">Near misses</p>
+                {celebrations.nearMisses.map((record) => (
+                  <p key={`${record.movement}-${record.modality}-near`} className="text-sm text-muted-foreground">
+                    {record.movement} • {record.modality.toUpperCase()} • {Math.round(record.value * 10) / 10} {record.unit}
+                    {record.previousValue ? ` (PR ${Math.round(record.previousValue * 10) / 10})` : null}
+                  </p>
+                ))}
+              </div>
+            ) : null}
+          </Card>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-4 w-full">
           <Card className="p-4 bg-card border-border/50 text-center">

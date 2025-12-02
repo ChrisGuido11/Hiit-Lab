@@ -9,7 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { FRAMEWORK_CONFIGS, Framework } from "@/../../shared/frameworks";
 import type { GeneratedWorkout } from "@/../../shared/schema";
 
-type WorkoutDetailData = GeneratedWorkout & { notes?: string; perceivedExertion?: number; createdAt?: string };
+type WorkoutDetailData = GeneratedWorkout & {
+  notes?: string;
+  perceivedExertion?: number;
+  createdAt?: string;
+  prHighlights?: string[] | null;
+};
 
 // Icon mapping for frameworks
 const FRAMEWORK_ICONS: Record<Framework, typeof Zap> = {
@@ -41,6 +46,7 @@ export default function WorkoutDetail() {
   }, []);
 
   const activeWorkout = historyWorkout ?? workout;
+  const highlightBadges = (activeWorkout as WorkoutDetailData | null)?.prHighlights?.filter(Boolean);
 
   // Get framework config if available
   const frameworkConfig = activeWorkout?.framework
@@ -152,6 +158,19 @@ export default function WorkoutDetail() {
               {activeWorkout.difficultyTag}
             </div>
           </div>
+
+          {highlightBadges && highlightBadges.length ? (
+            <div className="flex flex-wrap gap-2 justify-center">
+              {highlightBadges.map((highlight) => (
+                <span
+                  key={highlight}
+                  className="text-[11px] px-3 py-1 rounded-full bg-primary/10 text-primary border border-primary/40"
+                >
+                  {highlight}
+                </span>
+              ))}
+            </div>
+          ) : null}
 
           {(activeWorkout as WorkoutDetailData)?.notes || (activeWorkout as WorkoutDetailData)?.perceivedExertion ? (
             <Card className="p-4 bg-card/40 border-border/50 text-left space-y-2">
