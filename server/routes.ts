@@ -10,7 +10,11 @@ import {
   updateSkillScore
 } from "./utils/emomGenerator";
 import { pickFrameworkForGoal } from "@shared/goals";
-import { insertProfileSchema, insertWorkoutSessionSchema } from "@shared/schema";
+import {
+  insertProfileSchema,
+  insertWorkoutSessionSchema,
+  workoutGenerationRequestSchema,
+} from "@shared/schema";
 import { z } from "zod";
 import { workoutRoundsArraySchema } from "./utils/roundValidation";
 import { buildPersonalizationInsights, summarizeSessionPerformance } from "./utils/personalization";
@@ -116,8 +120,16 @@ export async function registerRoutes(
       const history = await storage.getWorkoutSessions(userId);
       const personalization = buildPersonalizationInsights(history);
 
+      const requestIntent = workoutGenerationRequestSchema.parse(req.query);
+
       // Check for framework override from query parameter
-      const frameworkOverride = req.query.framework as string | undefined;
+      const frameworkOverride = requestIntent.framework;
+
+      const sessionIntent = {
+        focusToday: requestIntent.focusToday,
+        energyLevel: requestIntent.energyLevel,
+        intentNote: requestIntent.intentNote,
+      };
 
       let selectedFramework: string;
       if (frameworkOverride && ['EMOM', 'Tabata', 'AMRAP', 'Circuit'].includes(frameworkOverride)) {
@@ -126,6 +138,14 @@ export async function registerRoutes(
       } else {
         // Use AI goal-based selection (Daily WOD)
         selectedFramework = pickFrameworkForGoal(profile.primaryGoal ?? null);
+
+        // Allow intent to gently steer the framework choice when no override is present
+        if (sessionIntent.energyLevel === "low" && selectedFramework === "tabata") {
+          selectedFramework = "circuit";
+        }
+        if (sessionIntent.focusToday?.toLowerCase().includes("mobility") && selectedFramework === "tabata") {
+          selectedFramework = "circuit";
+        }
       }
 
       // Generate workout using appropriate framework generator
@@ -138,6 +158,7 @@ export async function registerRoutes(
         profile.primaryGoal ?? null,
         profile.goalWeights ?? undefined,
         personalization,
+        sessionIntent,
       ] as const;
 
       switch (selectedFramework) {
@@ -155,6 +176,20 @@ export async function registerRoutes(
           workout = generateEMOMWorkout(...commonParams);
           break;
       }
+
+      const frameworkReason = frameworkOverride
+        ? `Framework pinned to ${frameworkOverride} from user selection.`
+        : `AI selected ${selectedFramework.toUpperCase()} based on goals and intent.`;
+
+      workout.rationale = {
+        framework: `${frameworkReason} ${workout.rationale?.framework ?? ""}`.trim(),
+        intensity:
+          workout.rationale?.intensity ??
+          `Intensity calibrated to profile skill (${profile.skillScore}) and energy (${sessionIntent.energyLevel ?? "moderate"}).`,
+        exerciseSelection:
+          workout.rationale?.exerciseSelection ??
+          `Exercises filtered for available equipment and tuned toward ${sessionIntent.focusToday ?? profile.goalFocus ?? "general"} focus.`,
+      };
 
       res.json(workout);
     } catch (error) {

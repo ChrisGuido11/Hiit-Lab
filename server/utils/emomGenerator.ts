@@ -13,7 +13,7 @@ import type { EquipmentId } from "@shared/equipment";
 import { getEquipmentRichness, migrateEquipment } from "@shared/equipment";
 import type { PrimaryGoalId } from "@shared/goals";
 import { getPrimaryGoalConfig, getCombinedExerciseBias, migrateLegacyGoal } from "@shared/goals";
-import type { GeneratedWorkout } from "@shared/schema";
+import type { GeneratedWorkout, SessionIntent } from "@shared/schema";
 import type { PersonalizationInsights, SessionPerformanceSummary } from "./personalization";
 
 interface Exercise {
@@ -199,10 +199,55 @@ function normalizeExerciseBias(
 
 const clampNumber = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
+function getEnergyLevelMultiplier(intent?: SessionIntent): number {
+  if (!intent?.energyLevel) return 1;
+  if (intent.energyLevel === "low") return 0.9;
+  if (intent.energyLevel === "high") return 1.1;
+  return 1;
+}
+
 function getIntensityMultiplier(personalization?: PersonalizationInsights): number {
   if (!personalization) return 1;
   const adjustment = (personalization.averageHitRate - 1) * 0.4 - personalization.skipRate * 0.35 - personalization.fatigueTrend * 0.25;
   return clampNumber(1 + adjustment, 0.75, 1.3);
+}
+
+function applyIntentBias(
+  bias: { compound: number; cardio: number; plyometric: number; mobility: number },
+  intent?: SessionIntent
+): { compound: number; cardio: number; plyometric: number; mobility: number } {
+  if (!intent?.focusToday) return bias;
+
+  const focus = intent.focusToday.toLowerCase();
+  const adjusted = { ...bias };
+
+  if (focus.includes("cardio") || focus.includes("engine")) {
+    adjusted.cardio += 0.3;
+  }
+  if (focus.includes("strength") || focus.includes("power") || focus.includes("lift")) {
+    adjusted.compound += 0.3;
+  }
+  if (focus.includes("mobility") || focus.includes("recovery") || focus.includes("stretch")) {
+    adjusted.mobility += 0.35;
+    adjusted.plyometric = Math.max(0, adjusted.plyometric - 0.2);
+  }
+  if (focus.includes("explosive") || focus.includes("speed")) {
+    adjusted.plyometric += 0.25;
+  }
+
+  return adjusted;
+}
+
+function describeExerciseBias(bias: { compound: number; cardio: number; plyometric: number; mobility: number }): string {
+  const sorted = Object.entries(bias).sort((a, b) => b[1] - a[1]);
+  const primary = sorted[0]?.[0];
+  if (!primary) return "balanced work";
+
+  const friendlyLabels: Record<string, string> = {
+    compound: "strength/compound", cardio: "engine/cardio", plyometric: "power/plyo", mobility: "mobility"
+  };
+
+  return friendlyLabels[primary] ?? primary;
 }
 
 function getMusclePreferenceMultiplier(muscleGroup: string, personalization?: PersonalizationInsights): number {
@@ -219,7 +264,8 @@ export function generateEMOMWorkout(
   goalFocus: string | null,
   primaryGoal?: PrimaryGoalId | null,
   goalWeights?: Record<PrimaryGoalId, number>,
-  personalization?: PersonalizationInsights
+  personalization?: PersonalizationInsights,
+  intent?: SessionIntent
 ): GeneratedWorkout {
   // Migrate legacy goalFocus to new primaryGoal if needed
   let resolvedPrimaryGoal = primaryGoal || migrateLegacyGoal(goalFocus);
@@ -244,7 +290,8 @@ export function generateEMOMWorkout(
     difficultyTag = "advanced";
   }
 
-  const intensityMultiplier = getIntensityMultiplier(personalization);
+  const energyMultiplier = getEnergyLevelMultiplier(intent);
+  const intensityMultiplier = getIntensityMultiplier(personalization) * energyMultiplier;
 
   // Determine duration based on goal preferences, difficulty, and equipment richness
   let durationMinutes: number;
@@ -291,11 +338,13 @@ export function generateEMOMWorkout(
     durationMinutes = Math.max(6, Math.round(durationMinutes * durationTuning));
   }
 
+  durationMinutes = Math.max(6, Math.round(durationMinutes * clampNumber(energyMultiplier, 0.85, 1.15)));
+
     // Get exercise bias from goal weights (or use primary goal config)
     const rawExerciseBias = goalWeights && resolvedPrimaryGoal
       ? getCombinedExerciseBias(goalWeights)
       : goalConfig?.exerciseBias ?? { compound: 0.5, cardio: 0.5, plyometric: 0.5, mobility: 0.2 };
-    const exerciseBias = normalizeExerciseBias(rawExerciseBias);
+    const exerciseBias = applyIntentBias(normalizeExerciseBias(rawExerciseBias), intent);
 
   // Filter exercises by equipment and difficulty
   const availableExercises = EXERCISES.filter((ex) => {
@@ -380,7 +429,15 @@ export function generateEMOMWorkout(
   }
 
   // Set focus label based on goal (use new goal label or fallback to legacy goalFocus)
-  const focusLabel = goalConfig?.label ?? goalFocus ?? "General Fitness";
+  const focusLabel = intent?.focusToday ?? goalConfig?.label ?? goalFocus ?? "General Fitness";
+
+  const rationale = {
+    framework: intent?.focusToday
+      ? `${focusLabel} focus requested; kept EMOM for steady pacing with frequent movement changes.`
+      : `Selected EMOM to align with ${goalConfig?.label ?? "general fitness"} goal bias and maintain interval structure.`,
+    intensity: `Calibrated to ${difficultyTag} (skill score ${skillScore}) with ${intent?.energyLevel ?? "moderate"} energy target; intensity multiplier ${Math.round(intensityMultiplier * 100)}% and ${durationMinutes} min duration adjusted for equipment (${equipmentRichness}).`,
+    exerciseSelection: `Biasing toward ${describeExerciseBias(exerciseBias)} while respecting available gear; variety guardrails reduced repeats and honored any mobility/cardio intent.`
+  };
 
   return {
     framework: "EMOM",
@@ -388,6 +445,8 @@ export function generateEMOMWorkout(
     difficultyTag,
     focusLabel,
     rounds,
+    intent,
+    rationale,
   };
 }
 
@@ -405,7 +464,8 @@ export function generateTabataWorkout(
   goalFocus: string | null,
   primaryGoal?: PrimaryGoalId | null,
   goalWeights?: Record<PrimaryGoalId, number>,
-  personalization?: PersonalizationInsights
+  personalization?: PersonalizationInsights,
+  intent?: SessionIntent
 ): GeneratedWorkout {
   // Migrate legacy goalFocus to new primaryGoal if needed
   let resolvedPrimaryGoal = primaryGoal || migrateLegacyGoal(goalFocus);
@@ -430,7 +490,8 @@ export function generateTabataWorkout(
     difficultyTag = "advanced";
   }
 
-  const intensityMultiplier = getIntensityMultiplier(personalization);
+  const energyMultiplier = getEnergyLevelMultiplier(intent);
+  const intensityMultiplier = getIntensityMultiplier(personalization) * energyMultiplier;
 
   // Tabata: 2-3 exercises (8-12 minutes total)
   // Each exercise is 4 minutes (8 rounds of 20s work / 10s rest)
@@ -454,11 +515,13 @@ export function generateTabataWorkout(
     durationMinutes = Math.max(6, Math.round(durationMinutes * tuning));
   }
 
+  durationMinutes = Math.max(6, Math.round(durationMinutes * clampNumber(energyMultiplier, 0.85, 1.15)));
+
     // Get exercise bias from goal weights
     const rawExerciseBias = goalWeights && resolvedPrimaryGoal
       ? getCombinedExerciseBias(goalWeights)
       : goalConfig?.exerciseBias ?? { compound: 0.5, cardio: 0.7, plyometric: 0.7, mobility: 0.1 };
-    const exerciseBias = normalizeExerciseBias(rawExerciseBias);
+    const exerciseBias = applyIntentBias(normalizeExerciseBias(rawExerciseBias), intent);
 
   // Filter exercises by equipment and difficulty - Tabata needs high-intensity exercises
   const availableExercises = EXERCISES.filter((ex) => {
@@ -517,7 +580,15 @@ export function generateTabataWorkout(
       }
     }
 
-  const focusLabel = goalConfig?.label ?? goalFocus ?? "General Fitness";
+  const focusLabel = intent?.focusToday ?? goalConfig?.label ?? goalFocus ?? "General Fitness";
+
+  const rationale = {
+    framework: intent?.focusToday
+      ? `${focusLabel} focus requested; Tabata kept for fast intervals while respecting intent.`
+      : `Selected Tabata to emphasize high-intensity intervals supporting ${goalConfig?.label ?? "conditioning"}.`,
+    intensity: `Scaled to ${difficultyTag} (skill score ${skillScore}) with ${intent?.energyLevel ?? "moderate"} energy input; multiplier ${Math.round(intensityMultiplier * 100)}% and ${durationMinutes} min total adjusted for energy/equipment (${equipmentRichness}).`,
+    exerciseSelection: `Weighted toward ${describeExerciseBias(exerciseBias)} while filtering for cardio/plyo-friendly moves and avoiding repeats.`
+  };
 
   return {
     framework: "Tabata",
@@ -528,6 +599,8 @@ export function generateTabataWorkout(
     workSeconds: Math.max(15, Math.round(20 * clampNumber(intensityMultiplier, 0.9, 1.15))),
     restSeconds: Math.max(8, Math.round(10 / clampNumber(intensityMultiplier, 0.9, 1.15))),
     sets: 8,
+    intent,
+    rationale,
   };
 }
 
@@ -545,7 +618,8 @@ export function generateAMRAPWorkout(
   goalFocus: string | null,
   primaryGoal?: PrimaryGoalId | null,
   goalWeights?: Record<PrimaryGoalId, number>,
-  personalization?: PersonalizationInsights
+  personalization?: PersonalizationInsights,
+  intent?: SessionIntent
 ): GeneratedWorkout {
   // Migrate legacy goalFocus to new primaryGoal if needed
   let resolvedPrimaryGoal = primaryGoal || migrateLegacyGoal(goalFocus);
@@ -570,7 +644,8 @@ export function generateAMRAPWorkout(
     difficultyTag = "advanced";
   }
 
-  const intensityMultiplier = getIntensityMultiplier(personalization);
+  const energyMultiplier = getEnergyLevelMultiplier(intent);
+  const intensityMultiplier = getIntensityMultiplier(personalization) * energyMultiplier;
 
   // AMRAP: 10-20 minutes typical duration
   let durationMinutes: number;
@@ -591,11 +666,13 @@ export function generateAMRAPWorkout(
     durationMinutes = Math.max(8, Math.round(durationMinutes * tuning));
   }
 
+  durationMinutes = Math.max(8, Math.round(durationMinutes * clampNumber(energyMultiplier, 0.85, 1.15)));
+
     // Get exercise bias from goal weights
     const rawExerciseBias = goalWeights && resolvedPrimaryGoal
       ? getCombinedExerciseBias(goalWeights)
       : goalConfig?.exerciseBias ?? { compound: 0.6, cardio: 0.6, plyometric: 0.5, mobility: 0.2 };
-    const exerciseBias = normalizeExerciseBias(rawExerciseBias);
+    const exerciseBias = applyIntentBias(normalizeExerciseBias(rawExerciseBias), intent);
 
   // Filter exercises by equipment and difficulty
   const availableExercises = EXERCISES.filter((ex) => {
@@ -658,7 +735,15 @@ export function generateAMRAPWorkout(
     });
   }
 
-  const focusLabel = goalConfig?.label ?? goalFocus ?? "General Fitness";
+  const focusLabel = intent?.focusToday ?? goalConfig?.label ?? goalFocus ?? "General Fitness";
+
+  const rationale = {
+    framework: intent?.focusToday
+      ? `${focusLabel} focus requested; AMRAP kept to encourage continuous effort with that emphasis.`
+      : `Selected AMRAP to align with ${goalConfig?.label ?? "metabolic"} emphasis and continuous pacing.`,
+    intensity: `Difficulty ${difficultyTag} (skill score ${skillScore}) with ${intent?.energyLevel ?? "moderate"} energy request; intensity multiplier ${Math.round(intensityMultiplier * 100)}% and ${durationMinutes} min duration tuned for energy/equipment (${equipmentRichness}).`,
+    exerciseSelection: `Circuit favors ${describeExerciseBias(exerciseBias)} while rotating through available gear and respecting avoidance of recent repeats.`
+  };
 
   return {
     framework: "AMRAP",
@@ -666,6 +751,8 @@ export function generateAMRAPWorkout(
     difficultyTag,
     focusLabel,
     rounds,
+    intent,
+    rationale,
   };
 }
 
@@ -683,7 +770,8 @@ export function generateCircuitWorkout(
   goalFocus: string | null,
   primaryGoal?: PrimaryGoalId | null,
   goalWeights?: Record<PrimaryGoalId, number>,
-  personalization?: PersonalizationInsights
+  personalization?: PersonalizationInsights,
+  intent?: SessionIntent
 ): GeneratedWorkout {
   // Migrate legacy goalFocus to new primaryGoal if needed
   let resolvedPrimaryGoal = primaryGoal || migrateLegacyGoal(goalFocus);
@@ -708,7 +796,8 @@ export function generateCircuitWorkout(
     difficultyTag = "advanced";
   }
 
-  const intensityMultiplier = getIntensityMultiplier(personalization);
+  const energyMultiplier = getEnergyLevelMultiplier(intent);
+  const intensityMultiplier = getIntensityMultiplier(personalization) * energyMultiplier;
 
   // Circuit: 3-5 rounds
   let totalRounds: number;
@@ -724,7 +813,7 @@ export function generateCircuitWorkout(
     const rawExerciseBias = goalWeights && resolvedPrimaryGoal
       ? getCombinedExerciseBias(goalWeights)
       : goalConfig?.exerciseBias ?? { compound: 0.7, cardio: 0.4, plyometric: 0.4, mobility: 0.3 };
-    const exerciseBias = normalizeExerciseBias(rawExerciseBias);
+    const exerciseBias = applyIntentBias(normalizeExerciseBias(rawExerciseBias), intent);
 
   // Filter exercises by equipment and difficulty
   const availableExercises = EXERCISES.filter((ex) => {
@@ -803,16 +892,27 @@ export function generateCircuitWorkout(
       ((totalRounds - 1) * restBetweenRounds / 60)
   );
 
-  const focusLabel = goalConfig?.label ?? goalFocus ?? "General Fitness";
+  const focusLabel = intent?.focusToday ?? goalConfig?.label ?? goalFocus ?? "General Fitness";
+  const adjustedDuration = Math.max(10, Math.round(durationMinutes * clampNumber(energyMultiplier, 0.85, 1.15)));
+
+  const rationale = {
+    framework: intent?.focusToday
+      ? `${focusLabel} focus requested; Circuit chosen for controlled work/rest while honoring intent.`
+      : `Selected Circuit to support ${goalConfig?.label ?? "balanced"} work with predictable rounds.`,
+    intensity: `Difficulty ${difficultyTag} (skill score ${skillScore}); ${intent?.energyLevel ?? "moderate"} energy target scales to ${Math.round(intensityMultiplier * 100)}% effort and ${adjustedDuration} min total with rest tuning (${equipmentRichness} equipment).`,
+    exerciseSelection: `Rounded toward ${describeExerciseBias(exerciseBias)} while rotating gear and spacing repeats for variety.`
+  };
 
   return {
     framework: "Circuit",
-    durationMinutes,
+    durationMinutes: adjustedDuration,
     difficultyTag,
     focusLabel,
     rounds,
     restSeconds: restBetweenRounds,
     totalRounds,
+    intent,
+    rationale,
   };
 }
 

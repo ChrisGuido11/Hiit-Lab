@@ -23,6 +23,22 @@ import { z } from "zod";
 import type { EquipmentId } from "./equipment";
 import type { PrimaryGoalId } from "./goals";
 
+export const sessionIntentSchema = z.object({
+  focusToday: z
+    .string()
+    .max(64, "Focus should be concise (64 characters max)")
+    .optional(),
+  energyLevel: z
+    .enum(["low", "moderate", "high"], {
+      required_error: "Energy level must be low, moderate, or high",
+      invalid_type_error: "Energy level must be low, moderate, or high",
+    })
+    .optional(),
+  intentNote: z.string().max(200).optional(),
+});
+
+export type SessionIntent = z.infer<typeof sessionIntentSchema>;
+
 // Session storage table (required for Replit Auth)
 export const sessions = pgTable(
   "sessions",
@@ -82,6 +98,12 @@ export type Profile = typeof profiles.$inferSelect;
 // Workout framework type
 export const workoutFrameworks = ["EMOM", "Tabata", "AMRAP", "Circuit"] as const;
 export type WorkoutFramework = typeof workoutFrameworks[number];
+
+export const workoutGenerationRequestSchema = sessionIntentSchema.extend({
+  framework: z.enum(workoutFrameworks).optional(),
+});
+
+export type WorkoutGenerationRequest = z.infer<typeof workoutGenerationRequestSchema>;
 
 // Workout sessions table
 export const workoutSessions = pgTable("workout_sessions", {
@@ -170,4 +192,10 @@ export interface GeneratedWorkout {
   restSeconds?: number; // For Tabata/Circuit: rest duration
   sets?: number; // For Tabata: number of intervals per exercise
   totalRounds?: number; // For Circuit: number of complete rounds
+  intent?: SessionIntent;
+  rationale?: {
+    framework: string;
+    intensity: string;
+    exerciseSelection: string;
+  };
 }
