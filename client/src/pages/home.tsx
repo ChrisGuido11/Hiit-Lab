@@ -375,10 +375,6 @@ export default function Home() {
                   {workout.durationMinutes} Min • {workout.rounds.length} Exercises • {workout.difficultyTag}
                 </p>
 
-                {workout.timeBlockHint && (
-                  <p className="text-[11px] text-muted-foreground mb-3 leading-snug">{workout.timeBlockHint}</p>
-                )}
-
                 {/* PR Opportunities */}
                 {personalRecords && workout && (() => {
                   const prMap = new Map(personalRecords.map((pr: any) => [pr.exerciseName, pr]));
