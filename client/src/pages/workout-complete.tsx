@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { GeneratedWorkout } from "@/../../shared/schema";
-import { getQueryFn } from "@/lib/queryClient";
+import { getQueryFn, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 
 type RoundActual = {
@@ -83,31 +83,17 @@ export default function WorkoutComplete() {
         };
       });
 
-      const res = await fetch("/api/workout/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          framework: workout.framework,
-          durationMinutes: workout.durationMinutes,
-          difficultyTag: workout.difficultyTag,
-          focusLabel: workout.focusLabel,
-          perceivedExertion: rpe,
-          rounds: payloadRounds,
-          notes,
-        }),
-        credentials: "include",
+      const res = await apiRequest("POST", "/api/workout/session", {
+        framework: workout.framework,
+        durationMinutes: workout.durationMinutes,
+        difficultyTag: workout.difficultyTag,
+        focusLabel: workout.focusLabel,
+        perceivedExertion: rpe,
+        rounds: payloadRounds,
+        notes,
       });
-      
-      if (!res.ok) {
-        const responseData = await res.json().catch(() => null);
-        const message =
-          (responseData && (responseData.message || responseData.error)) ||
-          "We couldn't log this session. Please try again.";
 
-        throw new Error(message);
-      }
-
-      return res.json();
+      return await res.json();
     },
     onSuccess: async () => {
       if (typeof window !== "undefined") {
@@ -119,9 +105,8 @@ export default function WorkoutComplete() {
       queryClient.invalidateQueries({ queryKey: ["/api/mastery"] });
       
       // Check for new PRs
-      const updatedPRs = await fetch("/api/personal-records", { credentials: "include" })
-        .then(res => res.ok ? res.json() : [])
-        .catch(() => []);
+      const prRes = await apiRequest("GET", "/api/personal-records").catch(() => null);
+      const updatedPRs = prRes ? await prRes.json() : [];
       
       if (workout && updatedPRs.length > 0) {
         const workoutExercises = new Set(workout.rounds.map((r: any) => r.exerciseName));
