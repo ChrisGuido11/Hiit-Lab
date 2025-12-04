@@ -1,5 +1,4 @@
 import {
-  users,
   profiles,
   workoutSessions,
   workoutRounds,
@@ -9,8 +8,6 @@ import {
   muscleGroupRecovery,
   weeklyPeriodization,
   frameworkPreferences,
-  type User,
-  type UpsertUser,
   type Profile,
   type InsertProfile,
   type WorkoutSession,
@@ -37,12 +34,6 @@ import type { EquipmentId } from "@shared/equipment";
 type ProfileInsert = typeof profiles.$inferInsert;
 
 export interface IStorage {
-  // User operations
-  getUser(id: string): Promise<User | undefined>;
-  upsertUser(user: UpsertUser): Promise<User>;
-  createOrUpdateUser(userData: { id: string; email: string; firstName?: string; lastName?: string; profileImageUrl?: string | null }): Promise<User>;
-  deleteUser(id: string): Promise<void>;
-
   // Profile operations
   getProfile(userId: string): Promise<Profile | undefined>;
   createProfile(profile: InsertProfile): Promise<Profile>;
@@ -82,61 +73,6 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  // User operations
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
-  }
-
-  async upsertUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          ...userData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
-    return user;
-  }
-
-  async createOrUpdateUser(userData: {
-    id: string;
-    email: string;
-    firstName?: string;
-    lastName?: string;
-    profileImageUrl?: string | null;
-  }): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values({
-        id: userData.id,
-        email: userData.email,
-        firstName: userData.firstName || '',
-        lastName: userData.lastName || '',
-        profileImageUrl: userData.profileImageUrl || null,
-      })
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          email: userData.email,
-          firstName: userData.firstName || '',
-          lastName: userData.lastName || '',
-          profileImageUrl: userData.profileImageUrl || null,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
-    return user;
-  }
-
-  async deleteUser(id: string): Promise<void> {
-    await db.delete(users).where(eq(users.id, id));
-  }
-
   // Profile operations
   async getProfile(userId: string): Promise<Profile | undefined> {
     const [profile] = await db.select().from(profiles).where(eq(profiles.userId, userId));
