@@ -295,17 +295,13 @@ export default function Profile() {
         {/* Profile Header */}
         <div className="flex items-center gap-4 mb-6">
           <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center border-2 border-primary">
-            {user?.profileImageUrl ? (
-              <img src={user.profileImageUrl} alt="Profile" className="w-full h-full rounded-full object-cover" />
-            ) : (
-              <span className="text-2xl font-display font-bold text-primary">
-                {user?.firstName?.charAt(0) || user?.email?.charAt(0) || "U"}
-              </span>
-            )}
+            <span className="text-2xl font-display font-bold text-primary">
+              {user?.email?.charAt(0).toUpperCase() || "U"}
+            </span>
           </div>
           <div>
             <h1 className="text-2xl font-bold text-white">
-              {profile?.displayName || user?.firstName || "Athlete"}
+              {profile?.displayName || user?.user_metadata?.first_name || "Athlete"}
             </h1>
             <p className="text-sm text-muted-foreground">{user?.email}</p>
           </div>

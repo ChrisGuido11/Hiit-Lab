@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { isAuthenticated } from "./supabaseAuth";
 import {
   generateEMOMWorkout,
   generateTabataWorkout,
@@ -38,28 +38,12 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Auth middleware
-  await setupAuth(app);
-
   // ==================== AUTH ROUTES ====================
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/auth/deleteAccount', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
-    } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
-    }
-  });
-
-  app.delete('/api/auth/deleteAccount', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
+      const userId = req.user!.id;
       await storage.deleteUser(userId);
-      req.logout(() => {
-        res.json({ message: "Account deleted successfully" });
-      });
+      res.json({ message: "Account deleted successfully" });
     } catch (error) {
       console.error("Error deleting account:", error);
       res.status(500).json({ message: "Failed to delete account" });
@@ -67,9 +51,9 @@ export async function registerRoutes(
   });
 
   // ==================== PROFILE ROUTES ====================
-  app.get('/api/profile', isAuthenticated, async (req: any, res) => {
+  app.get('/api/profile', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user!.id;
       const profile = await storage.getProfile(userId);
       
       if (!profile) {
@@ -83,9 +67,9 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/profile', isAuthenticated, async (req: any, res) => {
+  app.post('/api/profile', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user!.id;
       
       // Validate request body
       const profileData = insertProfileSchema.parse({
@@ -104,9 +88,9 @@ export async function registerRoutes(
     }
   });
 
-  app.patch('/api/profile', isAuthenticated, async (req: any, res) => {
+  app.patch('/api/profile', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user!.id;
       
       // Validate partial update
       const updates = insertProfileSchema.partial().omit({ userId: true }).parse(req.body);
@@ -123,9 +107,9 @@ export async function registerRoutes(
   });
 
   // ==================== WORKOUT GENERATOR ====================
-  app.get('/api/workout/generate', isAuthenticated, async (req: any, res) => {
+  app.get('/api/workout/generate', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user!.id;
       const profile = await storage.getProfile(userId);
 
       if (!profile) {
@@ -265,9 +249,9 @@ export async function registerRoutes(
   });
 
   // ==================== WORKOUT SESSION ROUTES ====================
-  app.post('/api/workout/session', isAuthenticated, async (req: any, res) => {
+  app.post('/api/workout/session', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user!.id;
       const timeBlock = categorizeTimeBlock(new Date());
 
       // Extract session data and rounds from request
@@ -382,9 +366,9 @@ export async function registerRoutes(
   });
 
   // ==================== PERSONAL RECORDS ====================
-  app.get('/api/personal-records', isAuthenticated, async (req: any, res) => {
+  app.get('/api/personal-records', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user!.id;
       const records = await storage.getPersonalRecords(userId);
       res.json(records);
     } catch (error) {
@@ -394,9 +378,9 @@ export async function registerRoutes(
   });
 
   // ==================== EXERCISE MASTERY ====================
-  app.get('/api/mastery', isAuthenticated, async (req: any, res) => {
+  app.get('/api/mastery', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user!.id;
       const mastery = await storage.getExerciseMastery(userId);
       res.json(mastery);
     } catch (error) {
@@ -406,9 +390,9 @@ export async function registerRoutes(
   });
 
   // ==================== RECOVERY STATUS ====================
-  app.get('/api/recovery', isAuthenticated, async (req: any, res) => {
+  app.get('/api/recovery', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user!.id;
       const recovery = await storage.getMuscleGroupRecovery(userId);
       // Recalculate recovery scores based on current time
       const { getRecoveryScores } = await import("./utils/recovery");
@@ -423,9 +407,9 @@ export async function registerRoutes(
   });
 
   // ==================== WEEKLY VOLUME ====================
-  app.get('/api/weekly-volume', isAuthenticated, async (req: any, res) => {
+  app.get('/api/weekly-volume', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user!.id;
       const { getWeekStart } = await import("./utils/periodization");
       const weekStart = getWeekStart(new Date());
       const periodization = await storage.getWeeklyPeriodization(userId, weekStart);
@@ -436,9 +420,9 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/workout/history', isAuthenticated, async (req: any, res) => {
+  app.get('/api/workout/history', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user!.id;
       const sessions = await storage.getWorkoutSessions(userId);
       res.json(sessions);
     } catch (error) {

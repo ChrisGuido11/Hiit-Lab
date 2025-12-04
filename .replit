@@ -20,10 +20,6 @@ localPort = 33299
 externalPort = 3001
 
 [[ports]]
-localPort = 33771
-externalPort = 4200
-
-[[ports]]
 localPort = 37705
 externalPort = 3002
 
@@ -68,3 +64,4 @@ integrations = ["javascript_log_in_with_replit:1.0.0", "javascript_database:1.0.
 [userenv.shared]
 VITE_SUPABASE_URL = "https://dthcradaclsmkxdbsksd.supabase.co"
 VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR0aGNyYWRhY2xzbWt4ZGJza3NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4MDYwODAsImV4cCI6MjA4MDM4MjA4MH0.RVjgTBzyUcT6KIQs-wc2bwa50jQhKzaCp5za_oRYfmY"
+SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR0aGNyYWRhY2xzbWt4ZGJza3NkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDgwNjA4MCwiZXhwIjoyMDgwMzgyMDgwfQ.yBnMbzE_-yK6oYh2H-_mEKCeta54PwIuT6tnw-_kQrc"

@@ -17,14 +17,14 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
 });
 
 // Extend Express Request type to include user
-declare global {
-  namespace Express {
-    interface Request {
-      user?: {
-        id: string;
-        email?: string;
-      };
-    }
+export interface AuthUser {
+  id: string;
+  email?: string;
+}
+
+declare module 'express-serve-static-core' {
+  interface Request {
+    user?: AuthUser;
   }
 }
 
