@@ -52,35 +52,11 @@ export const sessionIntentSchema = z.object({
 
 export type SessionIntent = z.infer<typeof sessionIntentSchema>;
 
-// Session storage table (required for Replit Auth)
-export const sessions = pgTable(
-  "sessions",
-  {
-    sid: varchar("sid").primaryKey(),
-    sess: jsonb("sess").notNull(),
-    expire: timestamp("expire").notNull(),
-  },
-  (table) => [index("IDX_session_expire").on(table.expire)],
-);
-
-// User storage table (required for Replit Auth)
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: varchar("email").unique(),
-  firstName: varchar("first_name"),
-  lastName: varchar("last_name"),
-  profileImageUrl: varchar("profile_image_url"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export type UpsertUser = typeof users.$inferInsert;
-export type User = typeof users.$inferSelect;
-
 // Profiles table (fitness preferences)
+// Note: userId references Supabase auth.users.id (UUID)
 export const profiles = pgTable("profiles", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  userId: uuid("user_id").notNull().unique(), // References Supabase auth.users.id
   displayName: text("display_name"),
   fitnessLevel: text("fitness_level").notNull(), // "Beginner", "Intermediate", "Advanced", "Elite"
   equipment: jsonb("equipment").notNull().$type<EquipmentId[]>(), // Typed equipment IDs from centralized config
@@ -94,11 +70,7 @@ export const profiles = pgTable("profiles", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const profilesRelations = relations(profiles, ({ one, many }) => ({
-  user: one(users, {
-    fields: [profiles.userId],
-    references: [users.id],
-  }),
+export const profilesRelations = relations(profiles, ({ many }) => ({
   sessions: many(workoutSessions),
 }));
 
@@ -123,7 +95,7 @@ export type WorkoutGenerationRequest = z.infer<typeof workoutGenerationRequestSc
 // Workout sessions table
 export const workoutSessions = pgTable("workout_sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  userId: uuid("user_id").notNull(),
   framework: text("framework").default("EMOM").notNull().$type<WorkoutFramework>(),
   durationMinutes: integer("duration_minutes").notNull(),
   difficultyTag: text("difficulty_tag").notNull(), // "beginner", "intermediate", "advanced"
@@ -191,7 +163,7 @@ export const exerciseStats = pgTable(
   "exercise_stats",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid("user_id").notNull(),
     exerciseName: text("exercise_name").notNull(),
     acceptCount: integer("accept_count").default(0).notNull(),
     skipCount: integer("skip_count").default(0).notNull(),
@@ -210,7 +182,7 @@ export const personalRecords = pgTable(
   "personal_records",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid("user_id").notNull(),
     exerciseName: text("exercise_name").notNull(),
     bestReps: integer("best_reps"),
     bestSeconds: integer("best_seconds"),
@@ -228,7 +200,7 @@ export const exerciseMastery = pgTable(
   "exercise_mastery",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid("user_id").notNull(),
     exerciseName: text("exercise_name").notNull(),
     masteryScore: doublePrecision("mastery_score").default(0).notNull(), // 0-100
     totalAttempts: integer("total_attempts").default(0).notNull(),
@@ -246,7 +218,7 @@ export const muscleGroupRecovery = pgTable(
   "muscle_group_recovery",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid("user_id").notNull(),
     muscleGroup: text("muscle_group").notNull(),
     recoveryScore: doublePrecision("recovery_score").default(1.0).notNull(), // 0-1, 1 = fully recovered
     lastWorkedAt: timestamp("last_worked_at").defaultNow().notNull(),
@@ -264,7 +236,7 @@ export const weeklyPeriodization = pgTable(
   "weekly_periodization",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid("user_id").notNull(),
     weekStart: timestamp("week_start").notNull(), // Start of week (Monday)
     muscleGroupVolume: jsonb("muscle_group_volume").notNull().$type<Record<string, { volume: number; sessions: number }>>(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -280,7 +252,7 @@ export const frameworkPreferences = pgTable(
   "framework_preferences",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid("user_id").notNull(),
     framework: text("framework").notNull().$type<WorkoutFramework>(),
     preferenceScore: doublePrecision("preference_score").default(0.5).notNull(), // 0-1
     completionRate: doublePrecision("completion_rate").default(1.0).notNull(), // 0-1
