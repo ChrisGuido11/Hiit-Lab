@@ -1,59 +1,45 @@
-import type { Request, Response, NextFunction, RequestHandler } from 'express';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js'
+import type { RequestHandler } from 'express'
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabaseUrl = process.env.VITE_SUPABASE_URL
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 if (!supabaseUrl || !supabaseServiceKey) {
-  throw new Error('Missing Supabase environment variables');
+  throw new Error('Missing Supabase environment variables')
 }
 
-// Server-side Supabase client with service role key
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
     autoRefreshToken: false,
     persistSession: false,
   },
-});
+})
 
-// Extend Express Request type to include user
-export interface AuthUser {
-  id: string;
-  email?: string;
-}
+export const requireAuth: RequestHandler = async (req, res, next) => {
+  const authHeader = req.headers.authorization
 
-declare module 'express-serve-static-core' {
-  interface Request {
-    user?: AuthUser;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Unauthorized' })
   }
-}
 
-export const isAuthenticated: RequestHandler = async (req: Request, res: Response, next: NextFunction) => {
+  const token = authHeader.substring(7)
+
   try {
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Unauthorized' });
-    }
-
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-
-    // Verify the JWT token with Supabase
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error } = await supabase.auth.getUser(token)
 
     if (error || !user) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ message: 'Invalid token' })
     }
 
     // Attach user to request
     req.user = {
       id: user.id,
-      email: user.email,
-    };
+      email: user.email!,
+    }
 
-    next();
+    next()
   } catch (error) {
-    console.error('Auth middleware error:', error);
-    return res.status(401).json({ message: 'Unauthorized' });
+    console.error('Auth error:', error)
+    return res.status(401).json({ message: 'Authentication failed' })
   }
-};
+}

@@ -1,247 +1,85 @@
-import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Zap, Timer, TrendingUp, Target, Mail, Lock } from "lucide-react";
-import { useLocation } from "wouter";
+import { Zap, Timer, TrendingUp, Target, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
 import MobileLayout from "@/components/layout/mobile-layout";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/hooks/useAuth";
+import { App as CapacitorApp } from "@capacitor/app";
+import { Capacitor } from "@capacitor/core";
+import { Input } from "@/components/ui/input";
 
 export default function Landing() {
-  const [, setLocation] = useLocation();
-  const { isAuthenticated } = useAuth();
-  const [mode, setMode] = useState<'landing' | 'signin' | 'signup'>('landing');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const { toast } = useToast();
+  const [email, setEmail] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [showEmailForm, setShowEmailForm] = useState(false);
 
-  // Redirect to home when authenticated
+  // Listen for deep link (magic link callback)
   useEffect(() => {
-    if (isAuthenticated) {
-      setLocation('/');
-    }
-  }, [isAuthenticated, setLocation]);
+    if (Capacitor.isNativePlatform()) {
+      let listenerHandle: any;
 
-  const handleSignUp = async (e: React.FormEvent) => {
+      CapacitorApp.addListener("appUrlOpen", async (event) => {
+        const url = new URL(event.url);
+        const hash = url.hash.substring(1); // Remove '#'
+
+        if (hash) {
+          const params = new URLSearchParams(hash);
+          const accessToken = params.get("access_token");
+          const refreshToken = params.get("refresh_token");
+
+          if (accessToken && refreshToken) {
+            // Set session from deep link tokens
+            await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            // User will be redirected by App.tsx route protection
+          }
+        }
+      }).then(handle => {
+        listenerHandle = handle;
+      });
+
+      return () => {
+        if (listenerHandle) {
+          listenerHandle.remove();
+        }
+      };
+    }
+  }, []);
+
+  const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setIsLoading(true);
+    setMessage("");
 
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const redirectTo = Capacitor.isNativePlatform()
+        ? "com.myhiitlab.app://auth/callback"
+        : `${window.location.origin}`;
+
+      const { error } = await supabase.auth.signInWithOtp({
         email,
-        password,
+        options: {
+          emailRedirectTo: redirectTo,
+        },
       });
 
       if (error) throw error;
 
-      // If email confirmation is required, session will be null
-      if (data.session === null) {
-        toast({
-          title: "Check your email",
-          description: "Please verify your email address to continue.",
-        });
-      }
-      // Otherwise, the useEffect will handle navigation when session is established
+      setMessage("Check your email for the magic link!");
     } catch (error: any) {
-      toast({
-        title: "Sign up failed",
-        description: error.message,
-        variant: "destructive",
-      });
+      setMessage(error.message || "Failed to send magic link");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
-      // useEffect will handle navigation when session is established
-    } catch (error: any) {
-      toast({
-        title: "Sign in failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+  const handleGetStarted = () => {
+    setShowEmailForm(true);
   };
-
-  if (mode === 'signin') {
-    return (
-      <MobileLayout hideNav>
-        <div className="h-full flex flex-col justify-center p-6 bg-black">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
-          >
-            <div className="text-center mb-8">
-              <h1 className="text-4xl font-display font-bold text-white mb-2">Welcome Back</h1>
-              <p className="text-muted-foreground">Sign in to continue your training</p>
-            </div>
-
-            <form onSubmit={handleSignIn} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-white uppercase tracking-wider">Email</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10 bg-secondary/50 border-border/50"
-                    placeholder="your@email.com"
-                    required
-                    data-testid="input-email"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-white uppercase tracking-wider">Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 bg-secondary/50 border-border/50"
-                    placeholder="••••••••"
-                    required
-                    data-testid="input-password"
-                  />
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full h-12 bg-primary text-black hover:bg-primary/90 font-bold uppercase tracking-wider"
-                data-testid="button-signin"
-              >
-                {loading ? "Signing in..." : "Sign In"}
-              </Button>
-            </form>
-
-            <div className="text-center">
-              <button
-                onClick={() => setMode('signup')}
-                className="text-primary hover:text-primary/80 text-sm font-bold"
-              >
-                Don't have an account? Sign up
-              </button>
-            </div>
-
-            <div className="text-center">
-              <button
-                onClick={() => setMode('landing')}
-                className="text-muted-foreground hover:text-white text-sm"
-              >
-                ← Back
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      </MobileLayout>
-    );
-  }
-
-  if (mode === 'signup') {
-    return (
-      <MobileLayout hideNav>
-        <div className="h-full flex flex-col justify-center p-6 bg-black">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
-          >
-            <div className="text-center mb-8">
-              <h1 className="text-4xl font-display font-bold text-white mb-2">Create Account</h1>
-              <p className="text-muted-foreground">Start your fitness journey today</p>
-            </div>
-
-            <form onSubmit={handleSignUp} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-white uppercase tracking-wider">Email</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10 bg-secondary/50 border-border/50"
-                    placeholder="your@email.com"
-                    required
-                    data-testid="input-email"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-white uppercase tracking-wider">Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 bg-secondary/50 border-border/50"
-                    placeholder="••••••••"
-                    required
-                    minLength={6}
-                    data-testid="input-password"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">Minimum 6 characters</p>
-              </div>
-
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full h-12 bg-primary text-black hover:bg-primary/90 font-bold uppercase tracking-wider"
-                data-testid="button-signup"
-              >
-                {loading ? "Creating account..." : "Create Account"}
-              </Button>
-            </form>
-
-            <div className="text-center">
-              <button
-                onClick={() => setMode('signin')}
-                className="text-primary hover:text-primary/80 text-sm font-bold"
-              >
-                Already have an account? Sign in
-              </button>
-            </div>
-
-            <div className="text-center">
-              <button
-                onClick={() => setMode('landing')}
-                className="text-muted-foreground hover:text-white text-sm"
-              >
-                ← Back
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      </MobileLayout>
-    );
-  }
 
   return (
     <MobileLayout hideNav>
@@ -296,24 +134,52 @@ export default function Landing() {
           initial={{ y: 50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.6 }}
-          className="space-y-3"
+          className="space-y-4"
         >
-          <Button
-            onClick={() => setMode('signup')}
-            className="w-full h-14 text-lg font-bold uppercase tracking-wider bg-primary text-black hover:bg-primary/90 neon-border"
-            data-testid="button-get-started"
-          >
-            <Zap className="w-5 h-5 mr-2 fill-current" />
-            Get Started
-          </Button>
-          <Button
-            onClick={() => setMode('signin')}
-            variant="outline"
-            className="w-full h-14 text-lg font-bold uppercase tracking-wider border-primary/50 text-primary hover:bg-primary/10"
-            data-testid="button-signin-landing"
-          >
-            Sign In
-          </Button>
+          {!showEmailForm ? (
+            <Button
+              onClick={handleGetStarted}
+              className="w-full h-14 text-lg font-bold uppercase tracking-wider bg-primary text-black hover:bg-primary/90 neon-border"
+              data-testid="button-login"
+            >
+              <Zap className="w-5 h-5 mr-2 fill-current" />
+              Get Started
+            </Button>
+          ) : (
+            <form onSubmit={handleMagicLink} className="space-y-4">
+              <div className="space-y-2">
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email"
+                  required
+                  className="h-14 text-lg bg-card/50 border-border/50 text-white placeholder:text-muted-foreground"
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full h-14 text-lg font-bold uppercase tracking-wider bg-primary text-black hover:bg-primary/90 neon-border"
+              >
+                <Mail className="w-5 h-5 mr-2" />
+                {isLoading ? "Sending..." : "Send Magic Link"}
+              </Button>
+              {message && (
+                <p className={`text-sm text-center ${message.includes("Check") ? "text-primary" : "text-red-500"}`}>
+                  {message}
+                </p>
+              )}
+              <Button
+                type="button"
+                onClick={() => setShowEmailForm(false)}
+                variant="ghost"
+                className="w-full text-muted-foreground hover:text-white"
+              >
+                Back
+              </Button>
+            </form>
+          )}
         </motion.div>
       </div>
     </MobileLayout>

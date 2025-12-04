@@ -1,4 +1,5 @@
 import {
+  users,
   profiles,
   workoutSessions,
   workoutRounds,
@@ -8,6 +9,8 @@ import {
   muscleGroupRecovery,
   weeklyPeriodization,
   frameworkPreferences,
+  type User,
+  type UpsertUser,
   type Profile,
   type InsertProfile,
   type WorkoutSession,
@@ -34,7 +37,10 @@ import type { EquipmentId } from "@shared/equipment";
 type ProfileInsert = typeof profiles.$inferInsert;
 
 export interface IStorage {
-  // User operations (Supabase auth handles user management)
+  // User operations
+  getUser(id: string): Promise<User | undefined>;
+  upsertUser(user: UpsertUser): Promise<User>;
+  createOrUpdateUser(userData: { id: string; email: string; firstName?: string; lastName?: string; profileImageUrl?: string | null }): Promise<User>;
   deleteUser(id: string): Promise<void>;
 
   // Profile operations
@@ -76,10 +82,59 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  // User operations (Supabase auth handles user management)
+  // User operations
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+
+  async createOrUpdateUser(userData: {
+    id: string;
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    profileImageUrl?: string | null;
+  }): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values({
+        id: userData.id,
+        email: userData.email,
+        firstName: userData.firstName || '',
+        lastName: userData.lastName || '',
+        profileImageUrl: userData.profileImageUrl || null,
+      })
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          email: userData.email,
+          firstName: userData.firstName || '',
+          lastName: userData.lastName || '',
+          profileImageUrl: userData.profileImageUrl || null,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+
   async deleteUser(id: string): Promise<void> {
-    // Just delete the profile - Supabase handles auth.users deletion
-    await db.delete(profiles).where(eq(profiles.userId, id));
+    await db.delete(users).where(eq(users.id, id));
   }
 
   // Profile operations
@@ -209,10 +264,8 @@ export class DatabaseStorage implements IStorage {
     const existing = await db
       .select()
       .from(personalRecords)
-      .where(and(
-        eq(personalRecords.userId, userId),
-        eq(personalRecords.exerciseName, record.exerciseName)
-      ))
+      .where(eq(personalRecords.userId, userId))
+      .where(eq(personalRecords.exerciseName, record.exerciseName))
       .limit(1);
 
     if (existing.length > 0) {
@@ -221,13 +274,13 @@ export class DatabaseStorage implements IStorage {
       const updates: Partial<InsertPersonalRecord> = {};
 
       // Check if new record is better
-      if (record.bestReps !== undefined && record.bestReps !== null && (existingRecord.bestReps === null || record.bestReps > existingRecord.bestReps)) {
+      if (record.bestReps !== null && (existingRecord.bestReps === null || record.bestReps > existingRecord.bestReps)) {
         updates.bestReps = record.bestReps;
         updates.bestSessionId = record.bestSessionId;
         updates.achievedAt = record.achievedAt;
         shouldUpdate = true;
       }
-      if (record.bestSeconds !== undefined && record.bestSeconds !== null && (existingRecord.bestSeconds === null || record.bestSeconds > existingRecord.bestSeconds)) {
+      if (record.bestSeconds !== null && (existingRecord.bestSeconds === null || record.bestSeconds > existingRecord.bestSeconds)) {
         updates.bestSeconds = record.bestSeconds;
         updates.bestSessionId = record.bestSessionId;
         updates.achievedAt = record.achievedAt;

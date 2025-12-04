@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { isAuthenticated } from "./supabaseAuth";
+import { requireAuth, supabase } from "./supabaseAuth";
 import {
   generateEMOMWorkout,
   generateTabataWorkout,
@@ -39,11 +39,42 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   // ==================== AUTH ROUTES ====================
-  app.delete('/api/auth/deleteAccount', isAuthenticated, async (req, res) => {
+  app.get('/api/auth/user', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user!.id;
+      const userEmail = req.user!.email;
+
+      // Get Supabase user to extract metadata
+      const { data: supabaseUser } = await supabase.auth.admin.getUserById(userId);
+
+      // Create or update local user record
+      const user = await storage.createOrUpdateUser({
+        id: userId,
+        email: userEmail,
+        firstName: supabaseUser?.user?.user_metadata?.firstName || '',
+        lastName: supabaseUser?.user?.user_metadata?.lastName || '',
+        profileImageUrl: supabaseUser?.user?.user_metadata?.avatar_url || null,
+      });
+
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  app.delete('/api/auth/deleteAccount', requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user!.id;
+
+      // Delete from local database (cascade handles related data)
       await storage.deleteUser(userId);
-      res.json({ message: "Account deleted successfully" });
+
+      // Delete from Supabase Auth
+      const { error } = await supabase.auth.admin.deleteUser(userId);
+      if (error) throw error;
+
+      res.json({ success: true, message: "Account deleted successfully" });
     } catch (error) {
       console.error("Error deleting account:", error);
       res.status(500).json({ message: "Failed to delete account" });
@@ -51,7 +82,7 @@ export async function registerRoutes(
   });
 
   // ==================== PROFILE ROUTES ====================
-  app.get('/api/profile', isAuthenticated, async (req, res) => {
+  app.get('/api/profile', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user!.id;
       const profile = await storage.getProfile(userId);
@@ -67,24 +98,14 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/profile', isAuthenticated, async (req, res) => {
+  app.post('/api/profile', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user!.id;
-      
-      // Set initial skillScore based on fitnessLevel
-      const fitnessLevel = req.body.fitnessLevel?.toLowerCase();
-      let skillScore = 50; // Default for intermediate
-      if (fitnessLevel === 'beginner') {
-        skillScore = 25;
-      } else if (fitnessLevel === 'advanced') {
-        skillScore = 75;
-      }
       
       // Validate request body
       const profileData = insertProfileSchema.parse({
         ...req.body,
         userId,
-        skillScore,
       });
       
       const profile = await storage.createProfile(profileData);
@@ -98,7 +119,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch('/api/profile', isAuthenticated, async (req, res) => {
+  app.patch('/api/profile', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user!.id;
       
@@ -117,7 +138,7 @@ export async function registerRoutes(
   });
 
   // ==================== WORKOUT GENERATOR ====================
-  app.get('/api/workout/generate', isAuthenticated, async (req, res) => {
+  app.get('/api/workout/generate', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user!.id;
       const profile = await storage.getProfile(userId);
@@ -259,7 +280,7 @@ export async function registerRoutes(
   });
 
   // ==================== WORKOUT SESSION ROUTES ====================
-  app.post('/api/workout/session', isAuthenticated, async (req, res) => {
+  app.post('/api/workout/session', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user!.id;
       const timeBlock = categorizeTimeBlock(new Date());
@@ -376,7 +397,7 @@ export async function registerRoutes(
   });
 
   // ==================== PERSONAL RECORDS ====================
-  app.get('/api/personal-records', isAuthenticated, async (req, res) => {
+  app.get('/api/personal-records', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user!.id;
       const records = await storage.getPersonalRecords(userId);
@@ -388,7 +409,7 @@ export async function registerRoutes(
   });
 
   // ==================== EXERCISE MASTERY ====================
-  app.get('/api/mastery', isAuthenticated, async (req, res) => {
+  app.get('/api/mastery', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user!.id;
       const mastery = await storage.getExerciseMastery(userId);
@@ -400,7 +421,7 @@ export async function registerRoutes(
   });
 
   // ==================== RECOVERY STATUS ====================
-  app.get('/api/recovery', isAuthenticated, async (req, res) => {
+  app.get('/api/recovery', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user!.id;
       const recovery = await storage.getMuscleGroupRecovery(userId);
@@ -417,7 +438,7 @@ export async function registerRoutes(
   });
 
   // ==================== WEEKLY VOLUME ====================
-  app.get('/api/weekly-volume', isAuthenticated, async (req, res) => {
+  app.get('/api/weekly-volume', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user!.id;
       const { getWeekStart } = await import("./utils/periodization");
@@ -430,7 +451,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/workout/history', isAuthenticated, async (req, res) => {
+  app.get('/api/workout/history', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user!.id;
       const sessions = await storage.getWorkoutSessions(userId);

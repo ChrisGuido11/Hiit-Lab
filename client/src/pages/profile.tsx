@@ -10,6 +10,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { supabase } from "@/lib/supabase";
 import MobileLayout from "@/components/layout/mobile-layout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,7 +41,6 @@ import { getEquipmentLabel, normalizeEquipment, migrateEquipment, type Equipment
 import { PRIMARY_GOALS, buildGoalWeights, type PrimaryGoalId } from "@shared/goals";
 import type { Profile as ProfileModel, WorkoutRound, WorkoutSession } from "@shared/schema";
 import { getQueryFn } from "@/lib/queryClient";
-import { supabase } from "@/lib/supabase";
 
 // Icon mapping for goals
 const GOAL_ICONS = {
@@ -70,14 +70,20 @@ export default function Profile() {
     if (!authLoading && !user) {
       toast({
         title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
+        description: "Please log in to continue.",
         variant: "destructive",
       });
       setTimeout(() => {
-        window.location.href = "/api/login";
+        window.location.href = "/landing";
       }, 500);
     }
   }, [user, authLoading, toast]);
+
+  const { data: localUser } = useQuery<any>({
+    queryKey: ["/api/auth/user"],
+    enabled: !!user,
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
 
   const { data: profile } = useQuery<ProfileModel | null>({
     queryKey: ["/api/profile"],
@@ -145,25 +151,15 @@ export default function Profile() {
 
   const deleteAccountMutation = useMutation({
     mutationFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      // Delete user data from our database
       const res = await fetch("/api/auth/deleteAccount", {
         method: "DELETE",
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to delete account data");
-
-      // Delete Supabase auth user
-      const { error } = await supabase.auth.admin.deleteUser(user.id);
-      if (error) throw error;
-
-      return true;
+      if (!res.ok) throw new Error("Failed to delete account");
+      return res.json();
     },
-    onSuccess: async () => {
+    onSuccess: () => {
       toast({ title: "Account deleted", description: "Your account has been permanently deleted." });
-      await supabase.auth.signOut();
       setTimeout(() => window.location.href = "/", 500);
     },
     onError: (error: Error) => {
@@ -173,7 +169,7 @@ export default function Profile() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    toast({ title: "Signed out", description: "You have been logged out successfully." });
+    window.location.href = "/landing";
   };
 
   const handleDeleteAccount = () => {
@@ -295,15 +291,19 @@ export default function Profile() {
         {/* Profile Header */}
         <div className="flex items-center gap-4 mb-6">
           <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center border-2 border-primary">
-            <span className="text-2xl font-display font-bold text-primary">
-              {user?.email?.charAt(0).toUpperCase() || "U"}
-            </span>
+            {localUser?.profileImageUrl ? (
+              <img src={localUser.profileImageUrl} alt="Profile" className="w-full h-full rounded-full object-cover" />
+            ) : (
+              <span className="text-2xl font-display font-bold text-primary">
+                {localUser?.firstName?.charAt(0) || localUser?.email?.charAt(0) || "U"}
+              </span>
+            )}
           </div>
           <div>
             <h1 className="text-2xl font-bold text-white">
-              {profile?.displayName || "Athlete"}
+              {profile?.displayName || localUser?.firstName || "Athlete"}
             </h1>
-            <p className="text-sm text-muted-foreground">{user?.email}</p>
+            <p className="text-sm text-muted-foreground">{localUser?.email}</p>
           </div>
         </div>
 

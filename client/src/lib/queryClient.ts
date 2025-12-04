@@ -8,14 +8,14 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
+async function getAuthHeaders(): Promise<HeadersInit> {
   const { data: { session } } = await supabase.auth.getSession();
-  const headers: Record<string, string> = {};
-  
+  const headers: HeadersInit = {};
+
   if (session?.access_token) {
     headers['Authorization'] = `Bearer ${session.access_token}`;
   }
-  
+
   return headers;
 }
 
@@ -25,14 +25,16 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   const authHeaders = await getAuthHeaders();
-  
+  const headers = {
+    ...authHeaders,
+    ...(data ? { "Content-Type": "application/json" } : {}),
+  };
+
   const res = await fetch(url, {
     method,
-    headers: {
-      ...authHeaders,
-      ...(data ? { "Content-Type": "application/json" } : {}),
-    },
+    headers,
     body: data ? JSON.stringify(data) : undefined,
+    credentials: "same-origin",
   });
 
   await throwIfResNotOk(res);
@@ -46,9 +48,10 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const authHeaders = await getAuthHeaders();
-    
+
     const res = await fetch(queryKey.join("/") as string, {
       headers: authHeaders,
+      credentials: "same-origin",
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

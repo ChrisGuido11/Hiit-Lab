@@ -9,7 +9,6 @@
           "type": "production",
           "buildConfiguration": "Release",
           "ios": {
-            "buildVersion": "auto",
             "version": "1.0.0",
             "bundleId": "com.myhiitlab.app",
             "displayName": "Hiit Lab"
