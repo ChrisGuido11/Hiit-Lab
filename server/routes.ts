@@ -71,10 +71,20 @@ export async function registerRoutes(
     try {
       const userId = req.user!.id;
       
+      // Set initial skillScore based on fitnessLevel
+      const fitnessLevel = req.body.fitnessLevel?.toLowerCase();
+      let skillScore = 50; // Default for intermediate
+      if (fitnessLevel === 'beginner') {
+        skillScore = 25;
+      } else if (fitnessLevel === 'advanced') {
+        skillScore = 75;
+      }
+      
       // Validate request body
       const profileData = insertProfileSchema.parse({
         ...req.body,
         userId,
+        skillScore,
       });
       
       const profile = await storage.createProfile(profileData);

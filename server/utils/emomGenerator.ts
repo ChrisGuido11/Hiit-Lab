@@ -385,15 +385,23 @@ export function generateEMOMWorkout(
       : goalConfig?.exerciseBias ?? { compound: 0.5, cardio: 0.5, plyometric: 0.5, mobility: 0.2 };
     const exerciseBias = applyIntentBias(normalizeExerciseBias(rawExerciseBias), intent);
 
+  // Determine max allowed difficulty based on fitnessLevel (caps exercise difficulty)
+  const maxAllowedDifficulty = fitnessLevel.toLowerCase() === 'beginner' 
+    ? 'beginner' 
+    : fitnessLevel.toLowerCase() === 'intermediate' 
+    ? 'intermediate' 
+    : 'advanced';
+
   // Filter exercises by equipment and difficulty, with recovery-aware filtering
   const availableExercises = EXERCISES.filter((ex) => {
     // Check if user has ALL required equipment for this exercise
     const hasAllEquipment = ex.equipment.every(eq => equipmentSet.has(eq));
     if (!hasAllEquipment) return false;
 
-    // Filter by difficulty tier
-    if (difficultyTag === "beginner" && ex.difficulty === "advanced") return false;
-    if (difficultyTag === "beginner" && ex.difficulty === "intermediate" && Math.random() > 0.3) return false;
+    // Strictly respect fitness level cap: Beginners only get beginner exercises
+    if (maxAllowedDifficulty === 'beginner' && ex.difficulty !== 'beginner') return false;
+    if (maxAllowedDifficulty === 'intermediate' && ex.difficulty === 'advanced') return false;
+    // Advanced users can get all difficulty levels
 
     // Recovery-aware filtering: avoid exercises targeting unrecovered muscle groups
     if (personalization?.recoveryScores) {
@@ -618,6 +626,13 @@ export function generateTabataWorkout(
       : goalConfig?.exerciseBias ?? { compound: 0.5, cardio: 0.7, plyometric: 0.7, mobility: 0.1 };
     const exerciseBias = applyIntentBias(normalizeExerciseBias(rawExerciseBias), intent);
 
+  // Determine max allowed difficulty based on fitnessLevel (caps exercise difficulty)
+  const maxAllowedDifficulty = fitnessLevel.toLowerCase() === 'beginner' 
+    ? 'beginner' 
+    : fitnessLevel.toLowerCase() === 'intermediate' 
+    ? 'intermediate' 
+    : 'advanced';
+
   // Filter exercises by equipment and difficulty - Tabata needs high-intensity exercises
   const availableExercises = EXERCISES.filter((ex) => {
     const hasAllEquipment = ex.equipment.every(eq => equipmentSet.has(eq));
@@ -626,9 +641,10 @@ export function generateTabataWorkout(
     // Tabata works best with cardio and plyometric exercises
     if (!ex.categories.cardio && !ex.categories.plyometric && !ex.categories.compound) return false;
 
-    // Filter by difficulty tier
-    if (difficultyTag === "beginner" && ex.difficulty === "advanced") return false;
-    if (difficultyTag === "beginner" && ex.difficulty === "intermediate" && Math.random() > 0.3) return false;
+    // Strictly respect fitness level cap: Beginners only get beginner exercises
+    if (maxAllowedDifficulty === 'beginner' && ex.difficulty !== 'beginner') return false;
+    if (maxAllowedDifficulty === 'intermediate' && ex.difficulty === 'advanced') return false;
+    // Advanced users can get all difficulty levels
 
     return true;
   });
@@ -772,14 +788,22 @@ export function generateAMRAPWorkout(
       : goalConfig?.exerciseBias ?? { compound: 0.6, cardio: 0.6, plyometric: 0.5, mobility: 0.2 };
     const exerciseBias = applyIntentBias(normalizeExerciseBias(rawExerciseBias), intent);
 
+  // Determine max allowed difficulty based on fitnessLevel (caps exercise difficulty)
+  const maxAllowedDifficulty = fitnessLevel.toLowerCase() === 'beginner' 
+    ? 'beginner' 
+    : fitnessLevel.toLowerCase() === 'intermediate' 
+    ? 'intermediate' 
+    : 'advanced';
+
   // Filter exercises by equipment and difficulty
   const availableExercises = EXERCISES.filter((ex) => {
     const hasAllEquipment = ex.equipment.every(eq => equipmentSet.has(eq));
     if (!hasAllEquipment) return false;
 
-    // Filter by difficulty tier
-    if (difficultyTag === "beginner" && ex.difficulty === "advanced") return false;
-    if (difficultyTag === "beginner" && ex.difficulty === "intermediate" && Math.random() > 0.3) return false;
+    // Strictly respect fitness level cap: Beginners only get beginner exercises
+    if (maxAllowedDifficulty === 'beginner' && ex.difficulty !== 'beginner') return false;
+    if (maxAllowedDifficulty === 'intermediate' && ex.difficulty === 'advanced') return false;
+    // Advanced users can get all difficulty levels
 
     return true;
   });
@@ -916,14 +940,22 @@ export function generateCircuitWorkout(
       : goalConfig?.exerciseBias ?? { compound: 0.7, cardio: 0.4, plyometric: 0.4, mobility: 0.3 };
     const exerciseBias = applyIntentBias(normalizeExerciseBias(rawExerciseBias), intent);
 
+  // Determine max allowed difficulty based on fitnessLevel (caps exercise difficulty)
+  const maxAllowedDifficulty = fitnessLevel.toLowerCase() === 'beginner' 
+    ? 'beginner' 
+    : fitnessLevel.toLowerCase() === 'intermediate' 
+    ? 'intermediate' 
+    : 'advanced';
+
   // Filter exercises by equipment and difficulty
   const availableExercises = EXERCISES.filter((ex) => {
     const hasAllEquipment = ex.equipment.every(eq => equipmentSet.has(eq));
     if (!hasAllEquipment) return false;
 
-    // Filter by difficulty tier
-    if (difficultyTag === "beginner" && ex.difficulty === "advanced") return false;
-    if (difficultyTag === "beginner" && ex.difficulty === "intermediate" && Math.random() > 0.3) return false;
+    // Strictly respect fitness level cap: Beginners only get beginner exercises
+    if (maxAllowedDifficulty === 'beginner' && ex.difficulty !== 'beginner') return false;
+    if (maxAllowedDifficulty === 'intermediate' && ex.difficulty === 'advanced') return false;
+    // Advanced users can get all difficulty levels
 
     return true;
   });
